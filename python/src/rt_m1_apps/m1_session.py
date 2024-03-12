@@ -171,9 +171,9 @@ from typing import Tuple, List, Optional
 import json
 import OpenSSL
 
-installed_packages_dir = '@python_packages_dir@'
-if os.path.isdir(installed_packages_dir) and installed_packages_dir not in sys.path:
-    sys.path.append(installed_packages_dir)
+#installed_packages_dir = '@python_packages_dir@'
+#if os.path.isdir(installed_packages_dir) and installed_packages_dir not in sys.path:
+#    sys.path.append(installed_packages_dir)
 
 from rt_m1_client.session import M1Session
 from rt_m1_client.exceptions import M1Error

@@ -61,9 +61,9 @@ from typing import Optional, Union
 import cryptography
 import OpenSSL
 
-installed_packages_dir = '@python_packages_dir@'
-if os.path.isdir(installed_packages_dir) and installed_packages_dir not in sys.path:
-    sys.path.append(installed_packages_dir)
+#installed_packages_dir = '@python_packages_dir@'
+#if os.path.isdir(installed_packages_dir) and installed_packages_dir not in sys.path:
+#    sys.path.append(installed_packages_dir)
 
 from rt_m1_client.client import M1Client, ProvisioningSessionResponse, ContentProtocolsResponse, ServerCertificateSigningRequestResponse, ServerCertificateResponse, ContentHostingConfigurationResponse, ConsumptionReportingConfigurationResponse, PolicyTemplateResponse, MetricsReportingConfigurationResponse
 from rt_m1_client.types import PROVISIONING_SESSION_TYPE_DOWNLINK, PROVISIONING_SESSION_TYPE_UPLINK, ContentHostingConfiguration, ConsumptionReportingConfiguration, PolicyTemplate, MetricsReportingConfiguration
