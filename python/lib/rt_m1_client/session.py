@@ -330,6 +330,20 @@ class M1Session:
         await self.__connect()
         return await self.__m1_client.uploadServerCertificate(provisioning_session_id, certificate_id, pem)
 
+    async def certificateDelete(self, provisioning_session_id: ResourceId, certificate_id: ResourceId) -> Optional[bool]:
+        '''Delete the server certificate in a provisioning session
+
+        :param provisioning_session_id: The provisioning session id of the provisioning session to upload the certificate to.
+        :param certificate_id: The certificate id in the provisioning session to upload the certificate to.
+
+        :return: ``True`` if the certificate was deleted, ``False`` if it wasn't deleted (still in use) and ``None`` if the provisioning
+                 session or certificate id was not found.
+        '''
+        if provisioning_session_id not in self.__provisioning_sessions:
+            return None
+        await self.__connect()
+        return await self.__m1_client.destroyServerCertificate(provisioning_session_id, certificate_id)
+
     # ContentHostingConfiguration methods
 
     async def contentHostingConfigurationCreate(self, provisioning_session: ResourceId, chc: ContentHostingConfiguration) -> bool:
