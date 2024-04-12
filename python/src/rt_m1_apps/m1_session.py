@@ -539,20 +539,51 @@ async def cmd_set_certificate(args: argparse.Namespace, config: Configuration) -
 async def cmd_check_all_renewal(args: argparse.Namespace, config: Configuration) -> int:
     '''Perform ``check-all-renewal`` operation
 
-    **TODO**
+    Scan through all known provisioning sessions for ContentHostingConfigurations using expired or close to expiring certificates.
     '''
     session = await get_session(config)
     for ps_id in await session.provisioningSessionIds():
-        chc = await session.getContentHostingConfiguration(ps_id)
-        # extract current cert ids
-        # get public cert for each cert id
-        #   check for soon or past expiry
-        #     request a new certificate
-        #     change id in chc and remember old cert ids
-        # if any cert ids changed in chc upload replacement chc
-        # delete old certs
-    sys.stderr.write('check-all-renewal not yet implemented\n')
-    return 1
+        cert_map = {}
+        chc = await session.contentHostingConfigurationGet(ps_id)
+        if chc is not None:
+            # extract current cert ids
+            for distrib in chc['distributionConfigurations']:
+                if 'certificateId' in distrib:
+                    if distrib['certificateId'] in cert_map:
+                        if cert_map[distrib['certificateId']] is not None:
+                            # Already recreated this certificate, just substitue the new certificate id
+                            distrib['certificateId'] = cert_map[distrib['certificateId']]
+                    else:
+                        # check if certificate is expiring
+                        cert = await session.certificateGet(ps_id, distrib['certificateId'])
+                        x509 = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, cert)
+                        end_str = x509.get_notAfter()
+                        if isinstance(end_str, bytes):
+                            end_str = end_str.decode('utf-8')
+                        end = datetime.datetime.strptime(end_str, '%Y%m%d%H%M%SZ').replace(tzinfo=datetime.timezone.utc)
+                        # check if this has or is expiring soon (7 days)
+                        if end < datetime.datetime.now(tz=datetime.timezone.utc)+datetime.timedelta(days=7):
+                            cert_id = await session.createNewCertificate(ps_id, extra_domain_names=distrib.get('domainNameAlias', None))
+                            if cert_id is None:
+                                print(f'''Failed to renew certificate {distrib['certificateId']} (create certificate failed)''')
+                                return 1
+                            cert_map[distrib['certificateId']] = cert_id
+                        else:
+                            # mark certificate ID as not needing replacement
+                            cert_map[distrib['certificateId']] = None
+            replaced_certs = [k for k,v in cert_map.items() if v is not None]
+            if len(replaced_certs) > 0:
+                # We made some replacements, update the ContentHostingConfiguration with renewed ids
+                await session.contentHostingConfigurationUpdate(ps_id, chc)
+                # Delete replaced certificate IDs
+                for cert_id in replaced_certs:
+                    await session.certificateDelete(ps_id, cert_id)
+                print(f'{len(replaced_certs)} certificates renewed in provisioning session {ps_id}')
+            else:
+                print(f'No certificates to renew in provisioning session {ps_id}')
+        else:
+            print(f'No certificates to renew in provisioning session {ps_id}')
+    return 0
 
 async def cmd_renew_certs(args: argparse.Namespace, config: Configuration) -> int:
     '''Perform ``renew-certs`` operation
@@ -561,7 +592,7 @@ async def cmd_renew_certs(args: argparse.Namespace, config: Configuration) -> in
     '''
     session = await get_session(config)
     ps_id = args.provisioning_session
-    chc = await session.getContentHostingConfiguration(ps_id)
+    chc = await session.contentHostingConfigurationGet(ps_id)
     # get list of unique cert ids in chc
     # for each cert id in list
     #   request a new certificate
@@ -1102,8 +1133,8 @@ async def parse_args() -> Tuple[argparse.Namespace,Configuration]:
                                         help='PEM file to load the public certificate from, if omitted will use stdin instead')
 
     # m1-session-cli check-certificate-renewal
-    #parser_checkrenewal = subparsers.add_parser('check-certificate-renewal', help='Renew all certificates if close to expiry')
-    #parser_checkrenewal.set_defaults(command=cmd_check_all_renewal)
+    parser_checkrenewal = subparsers.add_parser('check-certificate-renewal', help='Renew all certificates if close to expiry')
+    parser_checkrenewal.set_defaults(command=cmd_check_all_renewal)
 
     # m1-session-cli renew-certificate -p <provisioning-session-id>
     # m1-session-cli renew-certificate <ingest-URL> [<entry-point-path>]

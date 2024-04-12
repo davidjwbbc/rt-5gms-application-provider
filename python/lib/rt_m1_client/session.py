@@ -250,7 +250,7 @@ class M1Session:
                 ps['certificates'][cert_id] = {k.lower(): v for k,v in cert_resp.items()}
             else:
                 # Update the certificate info
-                if cert_resp['ServerCertificate'] is None:
+                if 'ServerCertificate' not in cert_resp or cert_resp['ServerCertificate'] is None:
                     cert_resp['ServerCertificate'] = ps['certificates'][cert_id]['servercertificate']
                 ps['certificates'][cert_id] = {k.lower(): v for k,v in cert_resp.items()}
 
