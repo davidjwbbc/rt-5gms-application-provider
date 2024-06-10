@@ -554,7 +554,7 @@ async def cmd_check_all_renewal(args: argparse.Namespace, config: Configuration)
                             distrib['certificateId'] = cert_map[distrib['certificateId']]
                     else:
                         # check if certificate is expiring
-                        cert = session.certificateGet(ps_id, distrib['certificateId'])
+                        cert = await session.certificateGet(ps_id, distrib['certificateId'])
                         x509 = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, cert)
                         end_str = x509.get_notAfter()
                         if isinstance(end_str, bytes):
@@ -570,7 +570,7 @@ async def cmd_check_all_renewal(args: argparse.Namespace, config: Configuration)
                         else:
                             # mark certificate ID as not needing replacement
                             cert_map[distrib['certificateId']] = None
-            replaced_certs = [k for k,v in cert_map if v is not None]
+            replaced_certs = [k for k,v in cert_map.items() if v is not None]
             if len(replaced_certs) > 0:
                 # We made some replacements, update the ContentHostingConfiguration with renewed ids
                 await session.contentHostingConfigurationUpdate(ps_id, chc)
