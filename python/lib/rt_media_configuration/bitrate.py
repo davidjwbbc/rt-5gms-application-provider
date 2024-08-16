@@ -1,4 +1,4 @@
-#!/usr/bin/python3 
+#!/usr/bin/python3
 #==============================================================================
 # 5G-MAG Reference Tools: Bitrate class
 #==============================================================================
@@ -33,7 +33,12 @@ If no qualifier is given then "bps" is assumed.
 '''
 
 import json
+import re
 from typing import Optional
+
+_MATCH_BITRATE_RE = re.compile(r'^(-?(?:\d*\.\d+|\d+))\s*(bps|Kbps|Mbps|Gbps|Tbps)?$', flags=re.IGNORECASE)
+_MATCH_BITRATE_VALUE_GROUP = 1
+_MATCH_BITRATE_UNITS_GROUP = 2
 
 class Bitrate:
     '''Bitrate class
@@ -41,7 +46,9 @@ class Bitrate:
 Converts and represents a bitrate.
 '''
 
-    def __init__(self, bps: Optional[int] = None, *, kbps: Optional[float] = None, mbps: Optional[float] = None, gbps: Optional[float] = None, tbps: Optional[float] = None):
+    def __init__(self, bps: Optional[int] = None, *, kbps: Optional[float] = None,
+                 mbps: Optional[float] = None, gbps: Optional[float] = None,
+                 tbps: Optional[float] = None):
         if all(p is None for p in [bps, kbps, mbps, gbps, tbps]):
             bps = 0
         elif kbps is not None:
@@ -114,19 +121,19 @@ Converts and represents a bitrate.
         except json.JSONDecodeError:
             raise ValueError("Bad JSON")
 
-        return Bitrate._fromJSONObject(obj)
+        return Bitrate.fromJSONObject(obj)
 
     @staticmethod
-    def _fromJSONObject(obj: str) -> "Bitrate":
+    def fromJSONObject(obj: str) -> "Bitrate":
         if not isinstance(obj,str):
             raise TypeError('Bitrate is represented by a string')
-        global _match_bitrate_re
-        global _match_bitrate_value_group
-        global _match_bitrate_units_group
-        match = _match_bitrate_re.match(str)
+        global _MATCH_BITRATE_RE
+        global _MATCH_BITRATE_VALUE_GROUP
+        global _MATCH_BITRATE_UNITS_GROUP
+        match = _MATCH_BITRATE_RE.match(obj)
         if match is None:
             raise ValueError('Bitrate not in correct format')
-        (value,units) = match.group(_match_bitrate_value_group, _match_bitrate_units_group)
+        (value,units) = match.group(_MATCH_BITRATE_VALUE_GROUP, _MATCH_BITRATE_UNITS_GROUP)
         bps = None
         if units is not None:
             units = units.lower()
@@ -144,5 +151,5 @@ Converts and represents a bitrate.
             raise ValueError('Bitrate units not understood')
         return Bitrate(bps)
     
-    def _jsonObject(self) -> str:
+    def jsonObject(self) -> str:
         return str(self)

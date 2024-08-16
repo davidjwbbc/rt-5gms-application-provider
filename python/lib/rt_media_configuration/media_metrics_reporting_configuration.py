@@ -99,22 +99,25 @@ This class models the configuration parameters for metrics reporting.
             obj = json.loads(json_obj)
         except json.JSONDecodeError:
             raise ValueError("Bad JSON")
-        return MediaMetricsReportingConfiguration._fromJSONObject(obj)
+        return MediaMetricsReportingConfiguration.fromJSONObject(obj)
 
     @staticmethod
-    def _fromJSONObject(obj: dict) -> "MediaMetricsReportingConfiguration":
+    def fromJSONObject(obj: dict) -> "MediaMetricsReportingConfiguration":
         kwargs = {}
-        if 'scheme' in obj:
-            kwargs['scheme'] = obj['scheme']
-        if 'reportingInterval' in obj:
-            kwargs['reporting_interval'] = obj['reportingInterval']
-        if 'samplePercentage' in obj:
-            kwargs['sample_percentage'] = obj['samplePercentage']
-        if 'samplingPeriod' in obj:
-            kwargs['sampling_period'] = obj['samplingPeriod']
+        for k,v in obj.items():
+            if k == 'scheme':
+                kwargs['scheme'] = v
+            elif k == 'reportingInterval':
+                kwargs['reporting_interval'] = v
+            elif k == 'samplePercentage' in obj:
+                kwargs['sample_percentage'] = v
+            elif k == 'samplingPeriod' in obj:
+                kwargs['sampling_period'] = v
+            else:
+                raise TypeError(f'MediaMetricsReportingConfiguration: JSON field "{k}" not understood')
         return MediaMetricsReportingConfiguration(**kwargs)
 
-    def _jsonObject(self) -> dict:
+    def jsonObject(self) -> dict:
         obj = {}
         if self.__scheme is not None:
             obj['scheme'] = self.__scheme

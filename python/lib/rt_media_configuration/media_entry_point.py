@@ -90,18 +90,30 @@ a mime content type with an optional array of profile strings.
             obj = json.loads(json_obj)
         except json.JSONDecodeError:
             raise ValueError("Bad JSON")
-        return MediaEntryPoint._fromJSONObject(obj)
+        return MediaEntryPoint.fromJSONObject(obj)
 
     @staticmethod
-    def _fromJSONObject(obj: dict) -> "MediaEntryPoint":
-        if "relativePath" not in obj or "contentType" not in obj:
-            raise TypeError('MediaEntryPoint mandatory fields are missing')
+    def fromJSONObject(obj: dict) -> "MediaEntryPoint":
         kwargs = {}
-        if "profiles" in obj:
-            kwargs['profiles'] = obj['profiles']
-        return MediaEntryPoint(obj['relativePath'], obj['contentType'], **kwargs)
+        mand_fields = ['relativePath','contentType']
+        rel_path = None
+        content_type = None
+        for k,v in obj.items():
+            if k == 'relativePath':
+                rel_path = v
+                mand_fields.remove(k)
+            elif k == 'contentType':
+                content_type = v
+                mand_fields.remove(k)
+            elif k == "profiles":
+                kwargs['profiles'] = v
+            else:
+                raise TypeError(f'MediaEntryPoint: JSON field "{k}" not understood')
+        if len(mand_fields) > 0:
+            raise TypeError(f'MediaEntryPoint: Mandatory JSON fields {mand_fields!r} are missing')
+        return MediaEntryPoint(rel_path, content_type, **kwargs)
 
-    def _jsonObject(self) -> dict:
+    def jsonObject(self) -> dict:
         obj = {"relativePath": self.__relative_path, "contentType": self.__content_type}
         if self.__profiles is not None:
             obj['profiles'] = self.__profiles

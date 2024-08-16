@@ -99,20 +99,23 @@ MediaDynamicPolicy.
         except json.JSONDecodeError:
             raise ValueError("Bad JSON")
 
-        return MediaChargingSpecification._fromJSONObject(obj)
+        return MediaChargingSpecification.fromJSONObject(obj)
 
     @staticmethod
-    def _fromJSONObject(obj: dict) -> "MediaChargingSpecification":
+    def fromJSONObject(obj: dict) -> "MediaChargingSpecification":
         kwargs = {}
-        if "sponId" in obj:
-            kwargs['sponsor_id'] = obj['sponId']
-        if "sponsorEnabled" in obj:
-            kwargs['enabled'] = obj['sponsorEnabled']
-        if "gpsi" in obj and len(obj["gpsi"]) > 0:
-            kwargs['gpsis'] = [Gpsi._fromJSONObject(gpsi) for gpsi in obj['gpsi']]
+        for k,v in obj.items():
+            if k == "sponId":
+                kwargs['sponsor_id'] = v
+            elif k == "sponsorEnabled":
+                kwargs['enabled'] = v
+            elif k == "gpsi" and len(v) > 0:
+                kwargs['gpsis'] = [Gpsi.fromJSONObject(gpsi) for gpsi in v]
+            else:
+                raise ValueError(f'MediaChargingSpecification: JSON field "{k}" not understood')
         return MediaChargingSpecification(**kwargs)
 
-    def _jsonObject(self) -> dict:
+    def jsonObject(self) -> dict:
         obj = {}
         if self.__sponsor_id is not None:
             obj['sponId'] = self.__sponsor_id

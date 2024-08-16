@@ -35,6 +35,7 @@ will only be published via M8.
 import json
 from typing import Optional, List, Dict, Iterable
 
+from .media_app_distribution import MediaAppDistribution
 from .media_dynamic_policy import MediaDynamicPolicy
 from .media_distribution import MediaDistribution
 from .media_reporting_configuration import MediaReportingConfiguration
@@ -50,7 +51,7 @@ media distributions information will only be published via M8.
 '''
 
     def __init__(self, name: str, ingest_url_prefix: str, distributions: Iterable[MediaDistribution],
-                 app_distributions: Optional[Iterable[MediaDistribution]] = None,
+                 app_distributions: Optional[Iterable[MediaAppDistribution]] = None,
                  reporting_configurations: Optional[MediaReportingConfiguration] = None,
                  dynamic_policies: Optional[Dict[str,MediaDynamicPolicy]] = None):
         '''Constructor
@@ -60,7 +61,7 @@ media distributions information will only be published via M8.
         :param name: The name of the media entry which may appear in the App.
         :param ingest_url: The ingest URL prefix for this media entry.
         :param distributions: A list of MediaDistributions (min. 1 entry) to directly attach to be published via M5.
-        :param app_distributions: An optional list of MediaDistributions to attach to the media entry to be published via M8.
+        :param app_distributions: An optional list of MediaAppDistributions to attach to the media entry to be published via M8.
         :param reporting_configurations: The reporting configurations to use with this media entry for publication via M5.
         :param dynamic_policies: The QoS dynamic policies to attach to this media entry for publication via M5.
         :return: A new MediaEntry object attached to this MediaConfiguration.
@@ -125,40 +126,48 @@ media distributions information will only be published via M8.
         except json.JSONDecodeError:
             raise ValueError("Bad JSON")
 
-        return MediaEntry._fromJSONObject(obj)
+        return MediaEntry.fromJSONObject(obj)
 
     @staticmethod
-    def _fromJSONObject(obj: dict) -> "MediaEntry":
-        if "name" not in obj or "ingestURL" not in obj or "distributionConfigurations" not in obj or len(obj["distributionConfigurations"]) < 1:
-            raise ValueError("Missing mandatory fields")
-
+    def fromJSONObject(obj: dict) -> "MediaEntry":
         kwargs = {}
+        mand_fields = ['name', 'ingestURL', 'distributionConfigurations']
+        name = None
+        ingest_url = None
+        dcs = None
         reporting = None
-        if "consumptionReporting" in obj:
-            reporting = MediaReportingConfiguration()
-            reporting.consumption = MediaConsumptionReportingConfiguration._fromJSONObject(obj["consumptionReporting"])
-            kwargs["reporting_configurations"] = reporting
-        if "metricsReporting" in obj:
-            mr_objs = obj["metricsReporting"]
-            if reporting is None:
-                reporting = MediaReportingConfiguration()
-                kwargs["reporting_configurations"] = reporting
-            for mr_obj in mr_objs:
-                reporting.addMetricsReporting(MediaMetricsReportingConfiguration._fromJSONObject(mr_obj))
-        if "policies" in obj:
-            kwargs["dynamic_policies"] = {}
-            for extId, policy in obj["policies"].items():
-                kwargs["dynamic_policies"][extId] = MediaDynamicPolicy._fromJSONObject(policy)
-        if "appDistributions" in obj:
-            kwargs["app_distributions"] = []
-            for app_dist_obj in obj["appDistributions"]:
-                kwargs["app_distributions"] += [MediaDistribution._fromJSONObject(app_dist_obj)]
-        dcs = []
-        for dc_obj in obj["distributionConfigurations"]:
-            dcs += [MediaDistribution._fromJSONObject(dc_obj)]
-        return MediaEntry(obj["name"], obj["ingestURL"], dcs, **kwargs)
+        for k,v in obj.items():
+            if k == 'name':
+                name = v
+                mand_fields.remove(k)
+            elif k == 'ingestURL':
+                ingest_url = v
+                mand_fields.remove(k)
+            elif k == 'distributionConfigurations':
+                dcs = [MediaDistribution.fromJSONObject(dc) for dc in v]
+                mand_fields.remove(k)
+            elif k == "consumptionReporting":
+                if reporting is None:
+                    reporting = MediaReportingConfiguration()
+                    kwargs["reporting_configurations"] = reporting
+                reporting.consumption = MediaConsumptionReportingConfiguration.fromJSONObject(v)
+            elif k == "metricsReporting":
+                if reporting is None:
+                    reporting = MediaReportingConfiguration()
+                    kwargs["reporting_configurations"] = reporting
+                for mr_obj in v:
+                    reporting.addMetricsReporting(MediaMetricsReportingConfiguration.fromJSONObject(mr_obj))
+            elif k == "policies":
+                kwargs["dynamic_policies"] = {extId: MediaDynamicPolicy.fromJSONObject(policy) for extId, policy in v.items()}
+            elif k == "appDistributions":
+                kwargs["app_distributions"] = [MediaAppDistribution.fromJSONObject(app_dist_obj) for app_dist_obj in v]
+            else:
+                raise TypeError(f'MediaEntry: JSON field "{k}" not understood')
+        if len(mand_fields) > 0:
+            raise TypeError(f'MediaEntry: Mandatory JSON fields {mand_fields!r} are missing')
+        return MediaEntry(name, ingest_url, dcs, **kwargs)
 
-    def _jsonObject(self) -> dict:
+    def jsonObject(self) -> dict:
         obj = {"name": self.__name, "ingestURL": self.__ingest_url_prefix, "distributionConfiguration": self.__distributions}
         if self.__app_distributions is not None and len(self.__app_distributions) > 0:
             obj["appDistributions"] = self.__app_distributions
@@ -229,28 +238,28 @@ media distributions information will only be published via M8.
         return True
 
     @property
-    def app_distributions(self) -> Optional[List[MediaDistribution]]:
+    def app_distributions(self) -> Optional[List[MediaAppDistribution]]:
         return self.__app_distributions
 
     @app_distributions.setter
-    def app_distributions(self, value: Optional[Iterable[MediaDistribution]]):
+    def app_distributions(self, value: Optional[Iterable[MediaAppDistribution]]):
         if value is not None:
             if not isinstance(value, list):
                 value = list(value)
-            if not all(isinstance(v, MediaDistribution) for v in value):
-                raise ValueError('MediaEntry.app_distributions list must only contain MediaDistribution objects')
+            if not all(isinstance(v, MediaAppDistribution) for v in value):
+                raise ValueError('MediaEntry.app_distributions list must only contain MediaAppDistribution objects')
             if len(value) == 0:
                 value = None
         self.__app_distributions = value
 
-    def addAppDistribution(self, value: MediaDistribution):
-        if not isinstance(value,MediaDistribution):
-            raise TypeError('MediaEntry.app_distributions can only contain MediaDistribution objects')
+    def addAppDistribution(self, value: MediaAppDistribution):
+        if not isinstance(value,MediaAppDistribution):
+            raise TypeError('MediaEntry.app_distributions can only contain MediaAppDistribution objects')
         if self.__app_distributions is None:
             self.__app_distributions = []
         self.__app_distributions += [value]
 
-    def removeAppDistribution(self, value: MediaDistribution) -> bool:
+    def removeAppDistribution(self, value: MediaAppDistribution) -> bool:
         if self.__app_distributions is None:
             return False
         try:
@@ -301,34 +310,32 @@ media distributions information will only be published via M8.
         self.__reporting_configurations = None
 
     @property
-    def dynamic_policies(self) -> Optional[List[MediaDynamicPolicy]]:
+    def dynamic_policies(self) -> Optional[Dict[str,MediaDynamicPolicy]]:
         return self.__dynamic_policies
 
     @dynamic_policies.setter
-    def dynamic_policies(self, value: Optional[Iterable[MediaDynamicPolicy]]):
+    def dynamic_policies(self, value: Optional[Dict[str,MediaDynamicPolicy]]):
         if value is not None:
-            if not isinstance(value, list):
-                value = list(value)
-            if not all(isinstance(v, MediaDynamicPolicy) for v in value):
-                raise TypeError('MediaEntry.dynamic_policies can only hold MediaDynamicPolicy objects')
+            if not isinstance(value, dict) or not all(isinstance(k,str) and isinstance(v, MediaDynamicPolicy)
+                                                      for k,v in value.items()):
+                raise TypeError('MediaEntry.dynamic_policies can only hold a dict of str->MediaDynamicPolicy')
             if len(value) == 0:
                 value = None
         self.__dynamic_policies = value
 
-    def addDynamicPolicy(self, value: MediaDynamicPolicy):
+    def addDynamicPolicy(self, name: str, value: MediaDynamicPolicy):
+        if not isinstance(name, str) or len(name) == 0:
+            raise TypeError('MediaEntry.dynamic_policies must have an external policy reference id')
         if not isinstance(value, MediaDynamicPolicy):
             raise TypeError('MediaEntry.dynamic_policies can only hold MediaDynamicPolicy objects')
         if self.__dynamic_policies is None:
-            self.__dynamic_policies = []
-        self.__dynamic_policies += [value]
+            self.__dynamic_policies = {}
+        self.__dynamic_policies[name] = value
 
-    def removeDynamicPolicy(self, value: MediaDynamicPolicy) -> bool:
-        if self.__dynamic_policies is None:
+    def removeDynamicPolicy(self, name: str) -> bool:
+        if self.__dynamic_policies is None or name not in self.__dynamic_policies:
             return False
-        try:
-            self.__dynamic_policies.remove(value)
-        except ValueError:
-            return False
+        del self.__dynamic_policies[name]
         if len(self.__dynamic_policies) == 0:
             self.__dynamic_policies = None
         return True

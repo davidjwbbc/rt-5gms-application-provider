@@ -95,18 +95,21 @@ and a 0 or more metrics reporting parameters.
         except json.JSONDecodeError:
             raise ValueError("Bad JSON")
 
-        return MediaReportingConfiguration._fromJSONObject(obj)
+        return MediaReportingConfiguration.fromJSONObject(obj)
 
     @staticmethod
-    def _fromJSONObject(obj: dict) -> "MediaReportingConfiguration":
+    def fromJSONObject(obj: dict) -> "MediaReportingConfiguration":
         kwargs = {}
-        if "consumptionReporting" in obj:
-            kwargs['consumption_reporting'] = MediaConsumptionReportingConfiguration._fromJSONObject(obj['consumptionReporting'])
-        if "metricsReporting" in obj and len(obj['metricsReporting']) > 0:
-            kwargs['metrics_reporting'] = [MediaMetricsReportingConfiguration._fromJSONObject(i) for i in obj['metricsReporting']]
+        for k,v in obj.items():
+            if k == "consumptionReporting":
+                kwargs['consumption_reporting'] = MediaConsumptionReportingConfiguration.fromJSONObject(v)
+            elif k == "metricsReporting" and len(v) > 0:
+                kwargs['metrics_reporting'] = [MediaMetricsReportingConfiguration.fromJSONObject(i) for i in v]
+            else:
+                raise TypeError(f'MediaReportingConfiguration: JSON field "{k}" not understood')
         return MediaReportingConfiguration(**kwargs)
 
-    def _jsonObject(self) -> dict:
+    def jsonObject(self) -> dict:
         obj = {}
         if self.__consumption is not None:
             obj['consumptionReporting'] = self.__consumption

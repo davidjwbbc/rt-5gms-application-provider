@@ -98,20 +98,23 @@ This class models the QoS parameters, charging rules and application rules for d
         except json.JSONDecodeError:
             raise ValueError("Bad JSON")
 
-        return MediaDynamicPolicy._fromJSONObject(obj)
+        return MediaDynamicPolicy.fromJSONObject(obj)
 
     @staticmethod
-    def _fromJSONObject(obj: dict) -> "MediaDynamicPolicy":
+    def fromJSONObject(obj: dict) -> "MediaDynamicPolicy":
         kwargs = {}
-        if "applicationSessionContext" in obj:
-            kwargs["session_context"] = MediaDynamicPolicySessionContext._fromJSONObject(obj["applicationSessionContext"])
-        if "qoSSpecification" in obj:
-            kwargs["qos_parameters"] = MediaQoSParameters._fromJSONObject(obj["qoSSpecification"])
-        if "chargingSpecification" in obj:  
-            kwargs["charging"] = MediaChargingSpecification._fromJSONObject(obj["chargingSpecification"])
+        for k,v in obj.items():
+            if k == "applicationSessionContext":
+                kwargs["session_context"] = MediaDynamicPolicySessionContext.fromJSONObject(v)
+            elif k == "qoSSpecification":
+                kwargs["qos_parameters"] = MediaQoSParameters.fromJSONObject(v)
+            elif k == "chargingSpecification":  
+                kwargs["charging"] = MediaChargingSpecification.fromJSONObject(v)
+            else:
+                raise TypeError(f'MediaDynamicPolicy: JSON field "{k}" not understood')
         return MediaDynamicPolicy(**kwargs)
 
-    def _jsonObject(self) -> dict:
+    def jsonObject(self) -> dict:
         obj = {}
         if self.__session_context is not None:
             obj['applicationSessionContext'] = self.__session_context

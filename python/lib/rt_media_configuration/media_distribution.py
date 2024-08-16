@@ -97,20 +97,23 @@ This class models the distribution configurations for a MediaEntry.
             obj = json.loads(json_obj)
         except json.JSONDecodeError:
             raise ValueError("Bad JSON")
-        return MediaDistribution._fromJSONObject(obj)
+        return MediaDistribution.fromJSONObject(obj)
 
     @staticmethod
-    def _fromJSONObject(obj: dict) -> "MediaDistribution":
+    def fromJSONObject(obj: dict) -> "MediaDistribution":
         kwargs = {}
-        if "domainNameAlias" in  obj:
-            kwargs["domain_name_alias"] = obj["domainNameAlias"]
-        if "certificateId" in obj:
-            kwargs["certificate_id"] = obj["certificateId"]
-        if "entryPoint" in obj:
-            kwargs["entry_point"] = MediaEntryPoint._fromJSONObject(obj['entryPoint'])
+        for k,v in obj.items():
+            if k == "domainNameAlias":
+                kwargs["domain_name_alias"] = v
+            elif k == "certificateId":
+                kwargs["certificate_id"] = v
+            elif k == "entryPoint":
+                kwargs["entry_point"] = MediaEntryPoint.fromJSONObject(v)
+            else:
+                raise TypeError(f'MediaDistribution: JSON field "{k}" not understood')
         return MediaDistribution(**kwargs)
 
-    def _jsonObject(self) -> dict:
+    def jsonObject(self) -> dict:
         obj = {}
         if self.__domain_name_alias is not None:
             obj['domainNameAlias'] = self.__domain_name_alias

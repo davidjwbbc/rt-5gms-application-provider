@@ -92,18 +92,21 @@ Tis class models a MediaDynamicPolicy application session context filter.
         except json.JSONDecodeError:
             raise ValueError("Bad JSON")
 
-        return MediaDynamicPolicySessionContext._fromJSONObject(obj)
+        return MediaDynamicPolicySessionContext.fromJSONObject(obj)
 
     @staticmethod
-    def _fromJSONObject(obj: dict) -> "MediaDynamicPolicySessionContext":
+    def fromJSONObject(obj: dict) -> "MediaDynamicPolicySessionContext":
         kwargs = {}
-        if "sliceInfo" in obj:
-            kwargs["snssai"] = Snssai._fromJSONObject(obj['sliceInfo'])
-        if "dnn" in obj:
-            kwargs["dnn"] = obj['dnn']
+        for k,v in obj.items():
+            if k == "sliceInfo":
+                kwargs["snssai"] = Snssai.fromJSONObject(v)
+            elif k == "dnn":
+                kwargs["dnn"] = v
+            else:
+                raise TypeError(f'MediaDynamicPolicySessionContext: JSON field "{k}" not understood')
         return MediaDynamicPolicySessionContext(**kwargs)
 
-    def _jsonObject(self) -> dict:
+    def jsonObject(self) -> dict:
         obj = {}
         if self.snssai is not None:
             obj['sliceInfo'] = self.snssai

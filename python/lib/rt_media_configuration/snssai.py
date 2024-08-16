@@ -85,18 +85,26 @@ This class models a 3GPP SNSSAI configuration specifier
             obj = json.loads(json_obj)
         except json.JSONDecodeError:
             raise ValueError("Bad JSON")
-        return Snssai._fromJSONObject(obj)
+        return Snssai.fromJSONObject(obj)
 
     @staticmethod
-    def _fromJSONObject(obj: dict) -> "Snssai":
-        if "sst" not in obj:
-            raise ValueError("Missing mandatory fields")
+    def fromJSONObject(obj: dict) -> "Snssai":
+        mand_fields = ['sst']
+        sst = None
         kwargs = {}
-        if "sd" in obj:
-            kwargs['sd'] = obj['sd']
-        return Snssai(obj['sst'], **kwargs)
+        for k,v in obj.items():
+            if k == 'sst':
+                sst = v
+                mand_fields.remove(k)
+            elif k == 'sd':
+                kwargs['sd'] = v
+            else:
+                raise TypeError(f'Snssai: JSON field "{k}" not understood')
+        if len(mand_fields) > 0:
+            raise TypeError(f'Snssai: Mandatory JSON fields {mand_fields!r} are missing')
+        return Snssai(sst, **kwargs)
 
-    def _jsonObject(self) -> dict:
+    def jsonObject(self) -> dict:
         obj = {"sst": self.__sst}
 
     @property

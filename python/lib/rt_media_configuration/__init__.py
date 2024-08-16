@@ -1,6 +1,7 @@
 from .media_configuration import MediaConfiguration
 from .exceptions import MediaConfigurationError
 from .media_entry import MediaEntry
+from .media_app_distribution import MediaAppDistribution
 from .media_distribution import MediaDistribution
 from .media_entry_point import MediaEntryPoint
 from .media_dynamic_policy import MediaDynamicPolicy

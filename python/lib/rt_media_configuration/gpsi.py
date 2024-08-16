@@ -98,15 +98,15 @@ This class provides validation of GPSI strings.
             obj = json.loads(json_obj)
         except json.JSONDecodeError:
             raise ValueError("Bad JSON")
-        return Gpsi._fromJSONObject(obj)
+        return Gpsi.fromJSONObject(obj)
 
     @staticmethod
-    def _fromJSONObject(obj: str) -> "Gpsi":
+    def fromJSONObject(obj: str) -> "Gpsi":
         if not isinstance(obj,str):
             raise TypeError('Gpsi value must be a string')
         return Gpsi(obj)
 
-    def _jsonObject(self) -> str:
+    def jsonObject(self) -> str:
         return self.__gpsi
 
     @staticmethod

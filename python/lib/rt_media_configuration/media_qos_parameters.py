@@ -112,24 +112,27 @@ This models QoS parameters for 3GPP systems.
         except json.JSONDecodeError:
             raise ValueError("Bad JSON")
 
-        return MediaQoSParameters._fromJSONObject(obj)
+        return MediaQoSParameters.fromJSONObject(obj)
 
     @staticmethod
-    def _fromJSONObject(obj: dict) -> "MediaQoSParameters":
+    def fromJSONObject(obj: dict) -> "MediaQoSParameters":
         kwargs = {}
-        if "qosReference" in obj:
-            kwargs['reference'] = obj['qosReference']
-        if 'maxAuthBtrUl' in obj:
-            kwargs['max_auth_bitrate_uplink'] = Bitrate._fromJSONObject(obj['maxAuthBtrUl'])
-        if 'maxAuthBtrDl' in obj:
-            kwargs['max_auth_bitrate_downlink'] = Bitrate._fromJSONObject(obj['maxAuthBtrDl'])
-        if 'defPacketLossRateUl' in obj:
-            kwargs['default_packet_loss_rate_uplink'] = obj['defPacketLossRateUl']
-        if 'defPacketLossRateDl' in obj:
-            kwargs['default_packet_loss_rate_downlink'] = obj['defPacketLossRateDl']
+        for k,v in obj.items():
+            if k == "qosReference":
+                kwargs['reference'] = v
+            elif k == 'maxAuthBtrUl':
+                kwargs['max_auth_bitrate_uplink'] = Bitrate.fromJSONObject(v)
+            elif k == 'maxAuthBtrDl':
+                kwargs['max_auth_bitrate_downlink'] = Bitrate.fromJSONObject(v)
+            elif k == 'defPacketLossRateUl':
+                kwargs['default_packet_loss_rate_uplink'] = v
+            elif k == 'defPacketLossRateDl':
+                kwargs['default_packet_loss_rate_downlink'] = v
+            else:
+                raise TypeError(f'MediaQoSParameters: JSON field "{k}" not understood')
         return MediaQoSParameters(**kwargs)
 
-    def _jsonObject(self) -> dict:
+    def jsonObject(self) -> dict:
         obj = {}
         if self.__reference is not None:
             obj["qosReference"] = self.__reference

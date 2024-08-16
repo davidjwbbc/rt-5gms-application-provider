@@ -99,22 +99,25 @@ This class models the consumption reporting configuration parameters.
             obj = json.loads(json_obj)
         except json.JSONDecodeError:
             raise ValueError("Bad JSON")
-        return MediaConsumptionReportingConfiguration._fromJSONObject(obj)
+        return MediaConsumptionReportingConfiguration.fromJSONObject(obj)
 
     @staticmethod
-    def _fromJSONObject(obj: dict) -> "MediaConsumptionReportingConfiguration":
+    def fromJSONObject(obj: dict) -> "MediaConsumptionReportingConfiguration":
         kwargs = {}
-        if 'reportingInterval' in obj:
-            kwargs['reporting_interval'] = obj['reportingInterval']
-        if 'samplePercentage' in obj:
-            kwargs['sample_percentage'] = obj['samplePercentage']
-        if 'locationReporting' in obj:
-            kwargs['location_reporting'] = obj['locationReporting']
-        if 'accessReporting' in obj:
-            kwargs['access_reporting'] = obj['accessReporting']
+        for k,v in obj.items():
+            if k == 'reportingInterval':
+                kwargs['reporting_interval'] = v
+            elif k == 'samplePercentage':
+                kwargs['sample_percentage'] = v
+            elif k == 'locationReporting':
+                kwargs['location_reporting'] = v
+            elif k == 'accessReporting':
+                kwargs['access_reporting'] = v
+            else:
+                raise TypeError(f'MediaConsumptionReportingConfiguration: JSON field "{k}" not understood')
         return MediaConsumptionReportingConfiguration(**kwargs)
 
-    def _jsonObject(self) -> dict:
+    def jsonObject(self) -> dict:
         obj = {}
         if self.__reporting_interval is not None:
             obj['reportingInterval'] = self.__reporting_interval
