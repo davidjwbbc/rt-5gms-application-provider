@@ -27,52 +27,43 @@ https://drive.google.com/file/d/1cinCiA778IErENZ3JN52VFW-1ffHpx7Z/view
 =====================================================
 
 This module provides the MediaEntry class which models a 3GPP TS 26.512
-ProvisioningSession with ContentHostingConfiguration, but also extends this
-model by allowing further named media distribution points to be added which
-will only be published via M8.
+ContentHostingConfiguration, but also extends this model by allowing
+further named media distribution points to be added which will only be
+published via M8.
 '''
 
 import json
 from typing import Optional, List, Dict, Iterable
 
 from .media_app_distribution import MediaAppDistribution
-from .media_dynamic_policy import MediaDynamicPolicy
 from .media_distribution import MediaDistribution
-from .media_reporting_configuration import MediaReportingConfiguration
-from .media_consumption_reporting_configuration import MediaConsumptionReportingConfiguration
-from .media_metrics_reporting_configuration import MediaMetricsReportingConfiguration
 
 class MediaEntry:
     '''MediaEntry class
 ================
-This class models a 3GPP TS 26.512 ProvisioningSession with ContentHostingConfiguration, but also extends this model by allowing
-further named media distribution points to be added. The ProvisioningSession information will be published via M5 but the extended
-media distributions information will only be published via M8.
+This class models a 3GPP TS 26.512 ContentHostingConfiguration, but also extends this model by allowing further named media
+distribution points to be added. The ProvisioningSession information will be published via M5 but the extended media distributions
+information will only be published via M8.
 '''
 
-    def __init__(self, name: str, ingest_url_prefix: str, distributions: Iterable[MediaDistribution],
-                 app_distributions: Optional[Iterable[MediaAppDistribution]] = None,
-                 reporting_configurations: Optional[MediaReportingConfiguration] = None,
-                 dynamic_policies: Optional[Dict[str,MediaDynamicPolicy]] = None):
+    def __init__(self, name: str, ingest_url_prefix: str, distributions: Iterable[MediaDistribution], is_pull: bool = True,
+                 app_distributions: Optional[Iterable[MediaAppDistribution]] = None):
         '''Constructor
 
         When this object is synchronised with the 5GMS AF it will gain a `provisioning_session_id` attribute.
 
-        :param name: The name of the media entry which may appear in the App.
+        :param name: The name of this media entry.
         :param ingest_url: The ingest URL prefix for this media entry.
         :param distributions: A list of MediaDistributions (min. 1 entry) to directly attach to be published via M5.
+        :param is_pull: This media entry will pull media from the source.
         :param app_distributions: An optional list of MediaAppDistributions to attach to the media entry to be published via M8.
-        :param reporting_configurations: The reporting configurations to use with this media entry for publication via M5.
-        :param dynamic_policies: The QoS dynamic policies to attach to this media entry for publication via M5.
-        :return: A new MediaEntry object attached to this MediaConfiguration.
+        :return: A new MediaEntry object attached to be attached to a MediaSession.
         '''
-        self.provisioning_session_id = None
         self.name = name
         self.ingest_url_prefix = ingest_url_prefix
         self.distributions = distributions
+        self.is_pull = is_pull
         self.app_distributions = app_distributions
-        self.reporting_configurations = reporting_configurations
-        self.dynamic_policies = dynamic_policies
         
     def __await__(self):
         return self.__asyncInit().__await__()
@@ -84,15 +75,13 @@ media distributions information will only be published via M8.
             return False
         if (len(self.__distributions) != len(other.__distributions)):
             return False
+        if (self.__is_pull != other.__is_pull):
+            return False
         if (len(self.__app_distributions) != len(other.__app_distributions)):
             return False
         if (sorted(self.__distributions) != sorted(other.__distributions)):
             return False
-        if (sorted(self.__app_distributions) != sorted(other.__app_distributions)):
-            return False
-        if (self.__reporting_configurations != other.__reporting_configurations):
-            return False
-        return (self.__dynamic_policies == other.__dynamic_policies)
+        return (sorted(self.__app_distributions) == sorted(other.__app_distributions))
 
     def __ne__(self, other: "MediaEntry") -> bool:
         return not (self == other)
@@ -100,12 +89,10 @@ media distributions information will only be published via M8.
     def __repr__(self) -> str:
         '''Python constructor string for this object'''
         ret = f'{self.__class__.__name__}({self.__name!r}, {self.__ingest_url_prefix!r}, {self.__distributions!r}'
+        if not self.__is_pull:
+            ret += ', is_pull=False'
         if self.__app_distributions is not None and len(self.__app_distributions) > 0:
             ret += f', app_distributions={self.__app_distributions!r}'
-        if self.__reporting_configurations is not None and (self.__reporting_configurations.consumption is not None or (self.__reporting_configurations.metrics is not None and len(self.__reporting_configurations.metrics) > 0)):
-            ret += f', reporting_configurations={self.__reporting_configurations!r}'
-        if self.__dynamic_policies is not None and len(self.__dynamic_policies) > 0:
-            ret += f', dynamic_policies={self.__dynamic_policies!r}'
         ret += ')'
         return ret
 
@@ -135,30 +122,18 @@ media distributions information will only be published via M8.
         name = None
         ingest_url = None
         dcs = None
-        reporting = None
         for k,v in obj.items():
             if k == 'name':
                 name = v
                 mand_fields.remove(k)
-            elif k == 'ingestURL':
+            if k == 'ingestURL':
                 ingest_url = v
                 mand_fields.remove(k)
             elif k == 'distributionConfigurations':
                 dcs = [MediaDistribution.fromJSONObject(dc) for dc in v]
                 mand_fields.remove(k)
-            elif k == "consumptionReporting":
-                if reporting is None:
-                    reporting = MediaReportingConfiguration()
-                    kwargs["reporting_configurations"] = reporting
-                reporting.consumption = MediaConsumptionReportingConfiguration.fromJSONObject(v)
-            elif k == "metricsReporting":
-                if reporting is None:
-                    reporting = MediaReportingConfiguration()
-                    kwargs["reporting_configurations"] = reporting
-                for mr_obj in v:
-                    reporting.addMetricsReporting(MediaMetricsReportingConfiguration.fromJSONObject(mr_obj))
-            elif k == "policies":
-                kwargs["dynamic_policies"] = {extId: MediaDynamicPolicy.fromJSONObject(policy) for extId, policy in v.items()}
+            elif k == 'pull':
+                kwargs['is_pull'] = v
             elif k == "appDistributions":
                 kwargs["app_distributions"] = [MediaAppDistribution.fromJSONObject(app_dist_obj) for app_dist_obj in v]
             else:
@@ -169,15 +144,10 @@ media distributions information will only be published via M8.
 
     def jsonObject(self) -> dict:
         obj = {"name": self.__name, "ingestURL": self.__ingest_url_prefix, "distributionConfiguration": self.__distributions}
+        if not self.__is_pull:
+            obj['pull'] = False
         if self.__app_distributions is not None and len(self.__app_distributions) > 0:
             obj["appDistributions"] = self.__app_distributions
-        if self.__reporting_configurations is not None:
-            if self.__reporting_configurations.consumption is not None:
-                obj['consumptionReporting'] = self.__reporting_configurations.consumption
-            if self.__reporting_configurations.metrics is not None and len(self.__reporting_configurations.metrics) > 0:
-                obj['metricsReporting'] = self.__reporting_configurations.metrics
-        if self.__dynamic_policies is not None and len(self.__dynamic_policies) > 0:
-            obj['policies'] = self.__dynamic_policies
         return obj
 
     async def __asyncInit(self):
@@ -195,8 +165,6 @@ media distributions information will only be published via M8.
     def name(self, value: str):
         if not isinstance(value, str):
             raise TypeError('MediaEntry.name must be a str')
-        if len(value) == 0:
-            raise ValueError('MediaEntry.name must be a non-empty string')
         self.__name = value
 
     @property
@@ -238,6 +206,16 @@ media distributions information will only be published via M8.
         return True
 
     @property
+    def is_pull(self) -> bool:
+        return self.__is_pull
+
+    @is_pull.setter
+    def is_pull(self, value: bool):
+        if not isinstance(value, bool):
+            value = bool(value)
+        self.__is_pull = value
+
+    @property
     def app_distributions(self) -> Optional[List[MediaAppDistribution]]:
         return self.__app_distributions
 
@@ -269,76 +247,3 @@ media distributions information will only be published via M8.
         if len(self.__app_distributions) == 0:
             self.__app_distributions = None
         return True
-
-    @property
-    def reporting_configurations(self) -> Optional[MediaReportingConfiguration]:
-        return self.__reporting_configurations
-
-    @reporting_configurations.setter
-    def reporting_configurations(self, value: Optional[MediaReportingConfiguration]):
-        if value is not None:
-            if not isinstance(value,MediaReportingConfiguration):
-                raise TypeError('MediaEntry.reporting_configurations can be either None or a MediaReportingConfiguration object')
-            if value.consumption is None and (value.metrics is None or len(value.metrics) == 0):
-                value = None
-        self.__reporting_configurations = value
-
-    def setConsumptionReportingConfiguration(self, value: MediaConsumptionReportingConfiguration):
-        if self.__reporting_configurations is None:
-            self.__reporting_configurations = MediaReportingConfiguration()
-        self.__reporting_configurations.consumption = value
-
-    def unsetConsumptionReportingConfiguration(self):
-        self.__reporting_configurations.consumption = None
-        if self.__reporting_configurations.metrics is None or len(self.__reporting_configurations.metrics) == 0:
-            self.__reporting_configurations = None
-
-    def addMetricsReportingConfiguration(self, value: MediaMetricsReportingConfiguration):
-        if self.__reporting_configurations is None:
-            self.__reporting_configurations = MediaReportingConfiguration()
-        self.__reporting_configurations.addMetricsReportingConfiguration(value)
-
-    def removeMetricsReportingConfiguration(self, value: MediaMetricsReportingConfiguration) -> bool:
-        if self.__reporting_configurations is None:
-            return False
-        ret = self.__reporting_configurations.removeMetricsReportingConfiguration(value)
-        if self.__reporting_configurations.metrics is None and self.__reporting_configurations.consumption is None:
-            self.__reporting_configurations = None
-        return ret
-
-    def unsetMetricsReportingConfigurations(self):
-        self.__reporting_configurations = None
-
-    @property
-    def dynamic_policies(self) -> Optional[Dict[str,MediaDynamicPolicy]]:
-        return self.__dynamic_policies
-
-    @dynamic_policies.setter
-    def dynamic_policies(self, value: Optional[Dict[str,MediaDynamicPolicy]]):
-        if value is not None:
-            if not isinstance(value, dict) or not all(isinstance(k,str) and isinstance(v, MediaDynamicPolicy)
-                                                      for k,v in value.items()):
-                raise TypeError('MediaEntry.dynamic_policies can only hold a dict of str->MediaDynamicPolicy')
-            if len(value) == 0:
-                value = None
-        self.__dynamic_policies = value
-
-    def addDynamicPolicy(self, name: str, value: MediaDynamicPolicy):
-        if not isinstance(name, str) or len(name) == 0:
-            raise TypeError('MediaEntry.dynamic_policies must have an external policy reference id')
-        if not isinstance(value, MediaDynamicPolicy):
-            raise TypeError('MediaEntry.dynamic_policies can only hold MediaDynamicPolicy objects')
-        if self.__dynamic_policies is None:
-            self.__dynamic_policies = {}
-        self.__dynamic_policies[name] = value
-
-    def removeDynamicPolicy(self, name: str) -> bool:
-        if self.__dynamic_policies is None or name not in self.__dynamic_policies:
-            return False
-        del self.__dynamic_policies[name]
-        if len(self.__dynamic_policies) == 0:
-            self.__dynamic_policies = None
-        return True
-
-    def unsetDynamicPolicies(self):
-        self.__dynamic_policies = None
