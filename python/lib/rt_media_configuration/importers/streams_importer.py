@@ -21,9 +21,11 @@ from typing import Optional
 import aiofiles
 
 from .importer import MediaConfigurationImporter
+from ..media_session import MediaSession
 from ..media_entry import MediaEntry
 from ..media_app_distribution import MediaAppDistribution
 from ..media_distribution import MediaDistribution
+from ..media_server_certificate import MediaServerCertificate
 
 class StreamsJSONImporter(MediaConfigurationImporter):
     '''StreamsJSONImporter class
@@ -61,19 +63,34 @@ in the MediaConfiguration.
         '''
         try:
             await model.reset()
+            certs_map = {}
             model.asp_id = self.__streams["aspId"]
-            model.app_id = self.__streams["appId"]
             for stream_id,stream_config in self.__streams["streams"].items():
-                await model.addMediaEntry(stream_id, MediaEntry.fromJSONObject(stream_config))
+                session = MediaSession.fromJSONObject(stream_config)
+                session.id = stream_id
+                if session.asp_id is None:
+                    session.asp_id = model.asp_id
+                if session.external_app_id is None:
+                    session.external_app_id = self.__streams["appId"]
+                if session.media_entry is not None:
+                    for d in session.media_entry.distributions:
+                        if d.certificate_id is not None:
+                            if session.certificateByLocalIdent(d.certificate_id) is None:
+                                session.addCertificate(MediaServerCertificate(local_ident=d.certificate_id))
+                await model.addMediaSession(session)
             for vod_media in self.__streams["vodMedia"]:
                 distrib_obj = vod_media.copy()
                 del distrib_obj['stream']
-                print(distrib_obj)
-                print('-------------------')
                 distrib = MediaAppDistribution.fromJSONObject(distrib_obj)
-                print(distrib)
-                print('===================')
-                entry = await model.mediaEntryById(vod_media['stream'])
+                session = await model.mediaSessionById(vod_media['stream'])
+                if session is None:
+                    self.__log.error(f'Attempt to add App distribution entry to non-existant session "{vod_media["stream"]}"')
+                    return False
+                entry = session.media_entry
+                if entry is None:
+                    self.__log.error(f'Attempt to add App distribution entry to session "{vod_media["stream"]}" without media configuration')
+                    print(model)
+                    return False
                 entry.addAppDistribution(distrib)
         except Exception:
             self.__log.error(traceback.format_exc())
