@@ -103,7 +103,7 @@ class Configuration:
         '''
         if section is None:
             section = self.__default_section
-        return self.__config.get(section, key, raw=raw, fallback=default)
+        return self.__config[section].get(section, key, raw=raw, fallback=default)
 
     def set(self, key: str, value: str, section: Optional[str] = None) -> bool:
         '''Set a configuration value
@@ -212,6 +212,8 @@ class Configuration:
         :returns: A ``str`` representation of the Configuration object.
         '''
         return f'Configuration(config="{self}")'
+
+app_configuration = Configuration()
 
 __all__ = [
         # Classes
