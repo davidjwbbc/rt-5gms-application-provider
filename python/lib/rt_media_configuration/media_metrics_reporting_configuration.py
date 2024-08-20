@@ -29,7 +29,9 @@ metrics reporting configuration parameters.
 '''
 
 import json
-from typing import Optional
+from typing import Optional, List, Iterable
+
+from .snssai import Snssai
 
 class MediaMetricsReportingConfiguration:
     '''MediaMetricsReportingConfiguration class
@@ -37,11 +39,20 @@ class MediaMetricsReportingConfiguration:
 This class models the configuration parameters for metrics reporting.
 '''
 
-    def __init__(self, scheme: Optional[str] = None, reporting_interval: Optional[int] = None, sample_percentage: Optional[float] = None, sampling_period: Optional[int] = None):
+    def __init__(self, sampling_period: int, metrics_reporting_configuration_id: Optional[str] = None,
+                 slice_scope: Optional[Iterable[Snssai]] = None, scheme: Optional[str] = None,
+                 data_network_name: Optional[str] = None, reporting_interval: Optional[int] = None,
+                 sample_percentage: Optional[float] = None, url_filters: Optional[Iterable[str]] = None,
+                 metrics: Optional[Iterable[str]] = None):
+        self.sampling_period = sampling_period
+        self.metrics_reporting_configuration_id = metrics_reporting_configuration_id
+        self.slice_scope = slice_scope
         self.scheme = scheme
+        self.data_network_name = data_network_name
         self.reporting_interval = reporting_interval
         self.sample_percentage = sample_percentage
-        self.sampling_period = sampling_period
+        self.url_filters = url_filters
+        self.metrics = metrics
 
     def __await__(self):
         return self.__asyncInit().__await__()
@@ -54,32 +65,60 @@ This class models the configuration parameters for metrics reporting.
         return self
 
     def __eq__(self, other: "MediaMetricsReportingConfiguration") -> bool:
+        if self.__metrics_reporting_configuration_id != other.__metrics_reporting_configuration_id:
+            return False
         if self.__reporting_interval != other.__reporting_interval:
             return False
         if self.__sampling_period != other.__sampling_period:
             return False
         if self.__sample_percentage != other.__sample_percentage:
             return False
-        return self.__scheme == other.__scheme
+        if self.__scheme != other.__scheme:
+            return False
+        if self.__data_network_name != other.__data_network_name:
+            return False
+        if self.__metrics is not None and other.__metrics is None:
+            return False
+        if self.__metrics is None and other.__metrics is not None:
+            return False
+        if self.__metrics is not None and sorted(self.__metrics) != sorted(other.__metrics):
+            return False
+        if self.__url_filters is not None and other.__url_filters is None:
+            return False
+        if self.__url_filters is None and other.__url_filters is not None:
+            return False
+        if self.__url_filters is not None and sorted(self.__url_filters) != sorted(other.__url_filters):
+            return False
+        if self.__slice_scope is not None and other.__slice_scope is None:
+            return False
+        if self.__slice_scope is None and other.__slice_scope is not None:
+            return False
+        if self.__slice_scope is None:
+            return True
+        return sorted(self.__slice_scope) == sorted(other.__slice_scope)
 
     def __ne__(self, other: "MediaMetricsReportingConfiguration") -> bool:
         return not (self == other)
 
     def __repr__(self) -> str:
         '''Python constructor string for this object'''
-        ret = f'{self.__class__.__name__}('
-        np = ''
+        ret = f'{self.__class__.__name__}({self.__sampling_period!r}'
+        if self.__metrics_reporting_configuration_id is not None:
+            ret += f', metrics_reporting_configuration_id={self.__metrics_reporting_configuration_id!r}'
+        if self.__slice_scope is not None:
+            ret += f', slice_scope={self.__slice_scope!r}'
         if self.__scheme is not None:
-            ret += f'scheme={self.__scheme!r}'
-            np = ', '
+            ret += f', scheme={self.__scheme!r}'
         if self.__reporting_interval is not None:
-            ret += f'{np}reporting_interval={self.__reporting_interval!r}'
-            np = ', '
+            ret += f', reporting_interval={self.__reporting_interval!r}'
         if self.__sample_percentage is not None:
-            ret += f'{np}sample_percentage={self.__sample_percentage!r}'
-            np = ', '
-        if self.__sampling_period is not None:
-            ret += f'{np}sampling_period={self.__sampling_period!r}'
+            ret += f', sample_percentage={self.__sample_percentage!r}'
+        if self.__data_network_name is not None:
+            ret += f', data_network_name={self.__data_network_name!r}'
+        if self.__metrics is not None and len(self.__metrics) > 0:
+            ret += f', metrics={self.__metrics!r}'
+        if self.__url_filters is not None and len(self.__url_filters) > 0:
+            ret += f', url_filters={self.__url_filters!r}'
         ret += ')'
         return ret
 
@@ -104,6 +143,8 @@ This class models the configuration parameters for metrics reporting.
     @staticmethod
     def fromJSONObject(obj: dict) -> "MediaMetricsReportingConfiguration":
         kwargs = {}
+        mand_fields = ['samplingPeriod']
+        sampling_period = None
         for k,v in obj.items():
             if k == 'scheme':
                 kwargs['scheme'] = v
@@ -112,22 +153,84 @@ This class models the configuration parameters for metrics reporting.
             elif k == 'samplePercentage' in obj:
                 kwargs['sample_percentage'] = v
             elif k == 'samplingPeriod' in obj:
-                kwargs['sampling_period'] = v
+                sampling_period = v
+                mand_fields.remove(k)
+            elif k == 'metricsReportingConfigurationId':
+                kwargs['metrics_reporting_configuration_id'] = v
+            elif k == 'dataNetworkName':
+                kwargs['data_network_name'] = v
+            elif k == 'metrics':
+                kwargs['metrics'] = v
+            elif k == 'urlFilters':
+                kwargs['url_filters'] = v
+            elif k == 'sliceScope':
+                kwargs['slice_scope'] = [Snssai.fromJSONObject(sns) for sns in v]
             else:
                 raise TypeError(f'MediaMetricsReportingConfiguration: JSON field "{k}" not understood')
-        return MediaMetricsReportingConfiguration(**kwargs)
+        if len(mand_fields) != 0:
+            raise TypeError(f'MediaMetricsReportingConfiguration: mandatory fields {mand_fields!r} are missing')
+        return MediaMetricsReportingConfiguration(sampling_period, **kwargs)
 
     def jsonObject(self) -> dict:
-        obj = {}
+        obj = {'samplingPeriod': self.__sampling_period}
         if self.__scheme is not None:
             obj['scheme'] = self.__scheme
         if self.__reporting_interval is not None:
             obj['reportingInterval'] = self.__reporting_interval
         if self.__sample_percentage is not None:
             obj['samplePercentage'] = self.__sample_percentage
-        if self.__sampling_period is not None:
-            obj['samplingPeriod'] = self.__sampling_period
+        if self.__metrics_reporting_configuration_id is not None:
+            obj['metricsReportingConfigurationId'] = self.__metrics_reporting_configuration_id
+        if self.__data_network_name is not None:
+            obj['dataNetworkName'] = self.__data_network_name
+        if self.__metrics is not None:
+            obj['metrics'] = self.__metrics
+        if self.__url_filters is not None:
+            obj['urlFilters'] = self.__url_filters
+        if self.__slice_scope is not None:
+            obj['sliceScope'] = self.__slice_scope
         return obj
+
+    @property
+    def metrics_reporting_configuration_id(self) -> Optional[str]:
+        return self.__metrics_reporting_configuration_id
+
+    @metrics_reporting_configuration_id.setter
+    def metrics_reporting_configuration_id(self, value: Optional[str]):
+        if value is not None:
+            if not isinstance(value, str):
+                raise TypeError('MediaMetricsReportingConfiguration.metrics_reporting_configuration_id must be either None or a str')
+        self.__metrics_reporting_configuration_id = value
+
+    @property
+    def slice_scope(self) -> Optional[List[Snssai]]:
+        return self.__slice_scope
+
+    @slice_scope.setter
+    def slice_scope(self, value: Optional[Iterable[Snssai]]):
+        if value is not None:
+            if not isinstance(value, list):
+                value = list(value)
+            if not all(isinstance(v, Snssai) for v in value):
+                raise TypeError('MediaMetricsReportingConfiguration.metrics_reporting_configuration_id can only contain rt_media_configuration.Snssai')
+            if len(value) == 0:
+                value = None
+        self.__slice_scope = value
+
+    def addSliceScope(self, value: Snssai):
+        if not isinstance(value, Snssai):
+            raise TypeError('MediaMetricsReportingConfiguration.metrics_reporting_configuration_id can only contain rt_media_configuration.Snssai')
+        if self.__slice_scope is None:
+            self.__slice_scope = []
+        self.__slice_scope += [value]
+
+    def removeSliceScope(self, value: Snssai) -> bool:
+        if self.__slice_scope is None:
+            return False
+        ret = self.__slice_scope.remove(value)
+        if ret and len(self.__slice_scope) == 0:
+            self.__slice_scope = None
+        return ret
 
     @property
     def scheme(self) -> Optional[str]:
@@ -139,6 +242,17 @@ This class models the configuration parameters for metrics reporting.
             if not isinstance(value,str):
                 raise TypeError('MediaMetricsReportingConfiguration.scheme must be a str or None')
         self.__scheme = value
+
+    @property
+    def data_network_name(self) -> Optional[str]:
+        return self.__data_network_name
+
+    @data_network_name.setter
+    def data_network_name(self, value: Optional[str]):
+        if value is not None:
+            if not isinstance(value, str):
+                raise TypeError('MediaMetricsReportingConfiguration.data_network_name must be a str or None')
+        self.__data_network_name = value
 
     @property
     def reporting_interval(self) -> Optional[int]:
@@ -184,3 +298,33 @@ This class models the configuration parameters for metrics reporting.
             if value == 0:
                 value = None
         self.__sampling_period = value
+
+    @property
+    def url_filters(self) -> Optional[List[str]]:
+        return self.__url_filters
+
+    @url_filters.setter
+    def url_filters(self, value: Optional[Iterable[str]]):
+        if value is not None:
+            if not isinstance(value, list):
+                value = list(value)
+            if not all(isinstance(v, str) for v in value):
+                raise TypeError('MediaMetricsReportingConfiguration.url_filters can only hold str values')
+            if len(value) == 0:
+                value = None
+        self.__url_filters = value
+
+    @property
+    def metrics(self) -> Optional[List[str]]:
+        return self.__metrics
+
+    @metrics.setter
+    def metrics(self, value: Optional[Iterable[str]]):
+        if value is not None:
+            if not isinstance(value, list):
+                value = list(value)
+            if not all(isinstance(v, str) for v in value):
+                raise TypeError('MediaMetricsReportingConfiguration.metrics can only hold str values')
+            if len(value) == 0:
+                value = None
+        self.__metrics = value
