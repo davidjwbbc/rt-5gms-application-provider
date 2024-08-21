@@ -66,12 +66,11 @@ in the MediaConfiguration.
             certs_map = {}
             model.asp_id = self.__streams["aspId"]
             for stream_id,stream_config in self.__streams["streams"].items():
+                stream_config['appId'] = self.__streams["appId"]
                 session = MediaSession.fromJSONObject(stream_config)
                 session.id = stream_id
                 if session.asp_id is None:
                     session.asp_id = model.asp_id
-                if session.external_app_id is None:
-                    session.external_app_id = self.__streams["appId"]
                 if session.media_entry is not None:
                     for d in session.media_entry.distributions:
                         if d.certificate_id is not None:
@@ -89,7 +88,6 @@ in the MediaConfiguration.
                 entry = session.media_entry
                 if entry is None:
                     self.__log.error(f'Attempt to add App distribution entry to session "{vod_media["stream"]}" without media configuration')
-                    print(model)
                     return False
                 entry.addAppDistribution(distrib)
         except Exception:

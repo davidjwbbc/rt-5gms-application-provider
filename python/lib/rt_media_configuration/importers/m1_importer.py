@@ -25,7 +25,12 @@ of the AF (via M1Session class and DataStore) into a MediaConfiguration.
 
 from typing import Optional, Union, Tuple
 
-from rt_m1_client import M1Session, DataStore, CertificateSigner
+from rt_m1_client import M1Session, DataStore, CertificateSigner, PROVISIONING_SESSION_TYPE_DOWNLINK, ProvisioningSession
+
+from ..media_session import MediaSession
+from ..media_entry import MediaEntry
+from ..media_distribution import MediaDistribution
+from ..media_entry_point import MediaEntryPoint
 
 from .importer import MediaConfigurationImporter
 
@@ -37,15 +42,23 @@ supplementary information from the DataStore and uses it to populate a
 MediaConfiguration model.
     '''
 
-    def __init__(self, authority: Tuple[str, int], persistent_data_store: DataStore, *, certificate_signer: Optional[Union[CertificateSigner,type,str]] = None):
+    def __init__(self, authority_or_session: Union[Tuple[str, int],M1Session], *, persistent_data_store: Optional[DataStore] = None, certificate_signer: Optional[Union[CertificateSigner,type,str]] = None):
         '''Constructor
         '''
         super().__init__()
-        self.__authority = authority
-        self.__data_store = persistent_data_store
-        self.__certificate_signer = certificate_signer
+        if isinstance(authority_or_session, M1Session):
+            self.__authority = authority_or_session.authority()
+            self.__data_store = authority_or_session.data_store()
+            self.__certificate_signer = authority_or_session.certificate_signer()
+            self.__session = authority_or_session
+        else:
+            if persistent_data_store is None:
+                raise ValueError('M1SessionImporter must be given a DataStore when initialised with an authority tuple')
+            self.__authority = authority_or_session
+            self.__data_store = persistent_data_store
+            self.__certificate_signer = certificate_signer
+            self.__session = None
         self.__psid_to_id_map = {}
-        self.__session = None
 
     async def _asyncInit(self):
         '''Asynchronous object instantiation
@@ -54,7 +67,8 @@ MediaConfiguration model.
         :return: self
         '''
         await super()._asyncInit()
-        self.__session = await M1Session(self.__authority, persistent_data_store=self.__data_store, certificate_signer=self.__certificate_signer)
+        if self.__session is None:
+            self.__session = await M1Session(self.__authority, persistent_data_store=self.__data_store, certificate_signer=self.__certificate_signer)
         await self.__loadFromDataStore()
         return self
 
@@ -64,21 +78,25 @@ MediaConfiguration model.
         await model.reset()
         provisioning_ids = await self.__session.provisioningSessionIds()
         for psid in provisioning_ids:
-            chc = await self.__session.provisioningSessionContentHostingConfiguration(psid)
-            if chc is not None:
-                dcs = []
-                for dc in chc['distributionConfigurations']:
-                    media_distrib = await MediaDistribution(domain_name_alias=dc.get('domainNameAlias', None), certificate_id=dc.get('certificateId', None))
-                    if 'entryPoint' in dc:
-                        media_distrib.entry_point = await MediaEntryPoint(relative_path=dc['entryPoint'].get('relativePath', None),
-                                                                          content_type=dc['entryPoint'].get('contentType', None),
-                                                                          profiles=dc['entryPoint'].get('profiles', None))
-                    dcs += [media_distrib]
-                entry = await MediaEntry(chc['name'], chc['ingestConfiguration']['baseURL'], dcs)
-                # TODO: Add AppDistributions from DataStore map
-                entry.id = self.__psid_to_id_map.get(psid, psid)
-                entry.provisioning_session_id = psid
-                await model.addMediaEntry(entry.id, entry)
+            ps = await self.__session.provisioningSessionGet(psid)
+            if ps is not None:
+                session = await MediaSession(ps['provisioningSessionType']==PROVISIONING_SESSION_TYPE_DOWNLINK, ps['appId'], provisioning_session_id=psid, asp_id=ps.get('aspId',None))
+                await model.addMediaSession(session)
+                chc = await self.__session.provisioningSessionContentHostingConfiguration(psid)
+                if chc is not None:
+                    dcs = []
+                    for dc in chc['distributionConfigurations']:
+                        media_distrib = await MediaDistribution(domain_name_alias=dc.get('domainNameAlias', None), certificate_id=dc.get('certificateId', None))
+                        if 'entryPoint' in dc:
+                            media_distrib.entry_point = await MediaEntryPoint(relative_path=dc['entryPoint'].get('relativePath', None),
+                                                                              content_type=dc['entryPoint'].get('contentType', None),
+                                                                              profiles=dc['entryPoint'].get('profiles', None))
+                        dcs += [media_distrib]
+                    entry = await MediaEntry(chc['name'], chc['ingestConfiguration']['baseURL'], dcs)
+                    # TODO: Add AppDistributions from DataStore map
+                    entry.id = self.__psid_to_id_map.get(psid, psid)
+                    entry.provisioning_session_id = psid
+                    session.media_entry = entry
         return True
 
     async def __loadFromDataStore(self):
