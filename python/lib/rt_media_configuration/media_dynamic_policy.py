@@ -41,7 +41,11 @@ class MediaDynamicPolicy:
 This class models the QoS parameters, charging rules and application rules for dynamic policy activation in a MediaEntry.
 '''
 
-    def __init__(self, session_context: Optional[MediaDynamicPolicySessionContext] = None, qos_parameters: Optional[MediaQoSParameters] = None, charging: Optional[MediaChargingSpecification] = None):
+    def __init__(self, local_id: Optional[str] = None, policy_template_id: Optional[str] = None,
+                 session_context: Optional[MediaDynamicPolicySessionContext] = None,
+                 qos_parameters: Optional[MediaQoSParameters] = None, charging: Optional[MediaChargingSpecification] = None):
+        self.id = local_id
+        self.policy_template_id = policy_template_id
         self.session_context = session_context
         self.qos_parameters = qos_parameters
         self.charging = charging
@@ -70,8 +74,14 @@ This class models the QoS parameters, charging rules and application rules for d
         '''Python constructor string for this object'''
         ret = f'{self.__class__.__name__}('
         np = ""
+        if self.__id is not None:
+            ret += f'local_id={self.__id!r}'
+            np = ', '
+        if self.__policy_template_id is not None:
+            ret += f'{np}policy_template_id={self.__policy_template_id!r}'
+            np = ', '
         if self.__session_context is not None:
-            ret += f'session_context={self.__session_context!r}'
+            ret += f'{np}session_context={self.__session_context!r}'
             np = ", "
         if self.__qos_parameters is not None:
             ret += f'{np}qos_parameters={self.__qos_parameters!r}'
@@ -90,6 +100,11 @@ This class models the QoS parameters, charging rules and application rules for d
         if pretty:
             kwargs = {"sort_keys": True, "indent": 4}
         return json.dumps(self, default=MediaConfiguration.jsonObjectHandler, **kwargs)
+
+    def identity(self) -> Optional[str]:
+        if self.__policy_template_id is not None:
+            return self.__policy_template_id
+        return self.__id
 
     @staticmethod
     def deserialise(json_obj: str) -> "MediaDynamicPolicy":
@@ -110,6 +125,8 @@ This class models the QoS parameters, charging rules and application rules for d
                 kwargs["qos_parameters"] = MediaQoSParameters.fromJSONObject(v)
             elif k == "chargingSpecification":  
                 kwargs["charging"] = MediaChargingSpecification.fromJSONObject(v)
+            elif k == "policyTemplateId":
+                kwargs['policy_template_id'] = v
             else:
                 raise TypeError(f'MediaDynamicPolicy: JSON field "{k}" not understood')
         return MediaDynamicPolicy(**kwargs)
@@ -122,7 +139,31 @@ This class models the QoS parameters, charging rules and application rules for d
             obj['qoSSpecification'] = self.__qos_parameters
         if self.__charging is not None:
             obj['chargingSpecification'] = self.__charging
+        if self.__policy_template_id is not None:
+            obj['policyTemplateId'] = self.__policy_template_id
         return obj
+
+    @property
+    def id(self) -> Optional[str]:
+        return self.__id
+
+    @id.setter
+    def id(self, value: Optional[str]):
+        if value is not None:
+            if not isinstance(value,str):
+                raise TypeError('MediaDynamicPolicy.id must be either a str or None')
+        self.__id = value
+
+    @property
+    def policy_template_id(self) -> Optional[str]:
+        return self.__policy_template_id
+
+    @policy_template_id.setter
+    def policy_template_id(self, value: Optional[str]):
+        if value is not None:
+            if not isinstance(value,str):
+                raise TypeError('MediaDynamicPolicy.policy_template_id must be either a str or None')
+        self.__policy_template_id = value
 
     @property
     def session_context(self) -> Optional[MediaDynamicPolicySessionContext]:
