@@ -94,14 +94,57 @@ class M1Session:
         await self.__reloadFromDataStore()
         return self
 
+    def authority(self) -> Tuple[str, int]:
+        return self.__m1_host
+
+    def data_store(self) -> Optional[DataStore]:
+        return self.__data_store_dir
+
+    def certificate_signer(self) -> Optional[Union[CertificateSigner,type,str]]:
+        return self.__cert_signer
+
     # Provisioning Session Management
 
-    async def provisioningSessionIds(self) -> Iterable:
+    async def provisioningSessionIds(self) -> Iterable[str]:
         '''Get the list of current known provisioning session ids
 
         :return: an iterable for the provisioning session ids.
         '''
         return self.__provisioning_sessions.keys()
+
+    async def provisioningSessionAddIds(self, ids: Union[str,Iterable[str]]) -> int:
+        '''Add externally known ProvisioningSessionIds to the list of known ids
+
+        This will add any Id not already known about that the AF confirms exists.
+
+        :param ids: Either a single ProvisioningSessionId or an iterable of ProvisioningSessionId values.
+        :return: The number of Ids successfully added
+        '''
+        count_added = 0
+        if isinstance(ids, str):
+            ids = [ids]
+        for psid in ids:
+            if psid not in self.__provisioning_sessions:
+                self.__provisioning_sessions[psid] = None
+                await self.__cacheProvisioningSession(psid)
+                if self.__provisioning_sessions[psid] is None:
+                    del self.__provisioning_sessions[psid]
+                else:
+                    count_added += 1
+        if count_added > 0 and self.__data_store_dir:
+            await self.__data_store_dir.set('provisioning_sessions', list(self.__provisioning_sessions.keys()))
+        return count_added
+
+    async def provisioningSessionGet(self, provisioning_session_id: ResourceId) -> Optional[ProvisioningSession]:
+        '''Get the ProvisioningSession given the ProvisioningSessionId
+
+        :param provisioning_session_id: The Id to look up.
+        :return: The ProvisioningSession object if it exists or None.
+        '''
+        if provisioning_session_id not in self.__provisioning_sessions:
+            return None
+        await self.__cacheProvisioningSession(provisioning_session_id)
+        return self.__provisioning_sessions[provisioning_session_id]['provisioningsession']
 
     async def provisioningSessionProtocols(self, provisioning_session_id: ResourceId) -> Optional[ContentProtocols]:
         '''Get the ContentProtocols for the existing provisioning session
@@ -135,16 +178,7 @@ class M1Session:
         :return: ``None`` if the provisioning session does not exist or if there is no `ContentHostingConfiguration` associated
                  with the provisioning session, otherwise return the `ContentHostingConfiguration`.
         '''
-        if provisioning_session_id not in self.__provisioning_sessions:
-            return None
-        await self.__cacheContentHostingConfiguration(provisioning_session_id)
-        ps = self.__provisioning_sessions[provisioning_session_id]
-        chc_resp = ps['content-hosting-configuration']
-        if chc_resp is None:
-            # Nothing got cached from the AF, probably an error, but no CHC found
-            return None
-        chc = chc_resp['ContentHostingConfiguration']
-        return chc
+        return await self.contentHostingConfigurationGet(provisioning_session_id)
 
     async def provisioningSessionDestroy(self, provisioning_session_id: ResourceId) -> Optional[bool]:
         '''Destroy a provisioning session
