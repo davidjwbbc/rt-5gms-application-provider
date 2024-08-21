@@ -306,9 +306,9 @@ class M1Session:
         ps = await self.__getProvisioningSessionCache(provisioning_session_id)
         if ps is not None:
             if 'certificates' not in ps or ps['certificates'] is None:
-                ps['certificates'] = [cert_id]
+                ps['certificates'] = {cert_id: None}
             elif cert_id not in ps['certificates']:
-                ps['certificates'] += [cert_id]
+                ps['certificates'][cert_id] = None
         return (cert_id,cert_resp['CertificateSigningRequestPEM'])
 
     async def certificateSet(self, provisioning_session_id: ResourceId, certificate_id: ResourceId, pem: str) -> Optional[bool]:
@@ -329,6 +329,25 @@ class M1Session:
             return None
         await self.__connect()
         return await self.__m1_client.uploadServerCertificate(provisioning_session_id, certificate_id, pem)
+
+    async def certificateDelete(self, provisioning_session_id: ResourceId, certificate_id: ResourceId) -> Optional[bool]:
+        '''Delete the server certificate in a provisioning session
+
+        :param provisioning_session_id: The provisioning session id of the provisioning session to upload the certificate to.
+        :param certificate_id: The certificate id in the provisioning session to upload the certificate to.
+
+        :return: ``True`` if the certificate was deleted, ``False`` if it wasn't deleted (still in use) and ``None`` if the provisioning
+                 session or certificate id was not found.
+        '''
+        if provisioning_session_id not in self.__provisioning_sessions:
+            return None
+        await self.__connect()
+        ret = await self.__m1_client.destroyServerCertificate(provisioning_session_id, certificate_id)
+        if ret is not None and ret:
+            ps = await self.__getProvisioningSessionCache(provisioning_session_id)
+            if ps is not None and 'certificates' in ps and certificate_id in ps['certificates']:
+                del ps['certificates'][certificate_id]
+        return ret
 
     # ContentHostingConfiguration methods
 
