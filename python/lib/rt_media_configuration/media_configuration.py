@@ -186,51 +186,70 @@ configuration with the 5GMS AF.
         # Check each session I hold to see if it exists in the other configuration or not
         to_del = []
         have = []
-        to_add = []
+        to_add = list(other.__model['sessions'].values())
         for session in self.__model['sessions'].values():
-            for o_session in other.__model['sessions'].values():
+            for o_session in to_add:
                 if session.shallow_eq(o_session):
                     have += [(session, o_session)]
+                    to_add.remove(o_session)
                     break
             else:
                 to_del += [session]
-        for o_session in other.__model['sessions'].values():
-            for session in self.__model['sessions'].values():
-                if session.shallow_eq(o_session):
-                    break
-            else:
-                to_add += [o_session]
-        ret += [MediaSessionDeltaOperation(self, add=session) for session in to_add]
-        ret += [MediaSessionDeltaOperation(self, remove=session) for session in to_del]
+        ret += [await MediaSessionDeltaOperation(self, add=session) for session in to_add]
+        ret += [await MediaSessionDeltaOperation(self, remove=session) for session in to_del]
         # check sub-structures of sessions we have for changes
         for session,o_session in have:
             if session.media_entry is None and o_session.media_entry is not None:
-                ret += [MediaEntryDeltaOperation(session, add=o_session.media_entry)]
+                ret += [await MediaEntryDeltaOperation(session, add=o_session.media_entry)]
             elif session.media_entry is not None:
-                ret += session.media_entry.deltas(o_session.media_entry, session)
+                if o_session.media_entry is None:
+                    ret += [await MediaEntryDeltaOperation(session, remove=True)]
+                elif session.media_entry != o_session.media_entry:
+                    ret += [await MediaEntryDeltaOperation(session, add=o_session.media_entry)]
 
             if session.dynamic_policies is None and o_session.dynamic_policies is not None:
-                ret += [MediaDynamicPolicyDeltaOperation(session, add=dp) for dp in o_session.dynamic_policies]
+                ret += [await MediaDynamicPolicyDeltaOperation(session, add=dp) for dp in o_session.dynamic_policies]
             elif session.dynamic_policies is not None and o_session.dynamic_policies is None:
-                ret += [MediaDynamicPolicyDeltaOperation(session, remove=dp) for dp in session.dynamic_policies]
+                ret += [await MediaDynamicPolicyDeltaOperation(session, remove=dp) for dp in session.dynamic_policies]
             elif session.dynamic_policies is not None and o_session.dynamic_policies is not None:
                 # make deltas for individual dynamic policies
                 for dp_id,dp in o_session.dynamic_policies.items():
                     if dp_id not in session.dynamic_policies:
-                        ret += [MediaDynamicPolicyDeltaOperation(session, add=(dp_id,dp))]
+                        ret += [await MediaDynamicPolicyDeltaOperation(session, add=(dp_id,dp))]
                     elif dp != session.dynamic_policies[dp_id]:
-                        ret += [MediaDynamicPolicyDeltaOperation(session, modify(dp_id,dp))]
+                        ret += [await MediaDynamicPolicyDeltaOperation(session, modify(dp_id,dp))]
                 for dp_id in session.dynamic_policies.keys():
                     if dp_id not in o_session.dynamic_policies:
-                        ret += [MediaDynamicPolicyDeltaOperation(session, remove=dp_id)]
+                        ret += [await MediaDynamicPolicyDeltaOperation(session, remove=dp_id)]
 
             if session.reporting_configurations is None and o_session.reporting_configurations is not None:
                 if o_session.reporting_configurations.consumption is not None:
-                    ret += [MediaConsumptionReportingDeltaOperation(session, add=o_session.reporting_configurations.consumption)]
+                    ret += [await MediaConsumptionReportingDeltaOperation(session, add=o_session.reporting_configurations.consumption)]
                 if o_session.reporting_configurations.metrics is not None:
-                    ret += [MediaMetricsReportingDeltaOperation(session, add=mr) for mr in o_session.reporting_configurations.metrics]
+                    ret += [await MediaMetricsReportingDeltaOperation(session, add=mr) for mr in o_session.reporting_configurations.metrics]
             elif session.reporting_configurations is not None:
-                ret += session.reporting_configurations.deltas(o_session.reporting_configurations, session)
+                if session.reporting_configurations.consumption is not None:
+                    if o_session.reporting_configurations is None or o_session.reporting_configurations.consumption is None:
+                        ret += [await MediaConsumptionReportingDeltaOperation(session, remove=True)]
+                    elif session.reporting_configurations.consumption != o_session.reporting_configurations.consumption:
+                        ret += [await MediaConsumptionReportingDeltaOperation(session, add=o_session.reporting_configurations.consumption)]
+                else:
+                    if o_session.reporting_configurations is not None and o_session.reporting_configurations.consumption is not None:
+                        ret += [await MediaConsumptionReportingDeltaOperation(session, add=o_session.reporting_configurations.consumption)]
+                if session.reporting_configurations.metrics is not None:
+                    metric_to_del = []
+                    if o_session.reporting_configurations is not None and o_session.reporting_configurations.metrics is not None:
+                        metric_to_add = o_session.reporting_configurations.metrics.copy()
+                    else:
+                        metric_to_add = []
+                    for metric in session.reporting_configurations.metrics:
+                        if metric in metric_to_add:
+                            metric_to_add.remove(metric)
+                        else:
+                            metric_to_del += [metric]
+                    ret += [await MediaMetricsReportingDeltaOperation(session, add=metric) for metric in metric_to_add]
+                    ret += [await MediaMetricsReportingDeltaOperation(session, remove=metric) for metric in metric_to_del]
+                elif o_session.reporting_configurations is not None and o_session.reporting_configurations.metrics is not None:                         ret += [await MediaMetricsReportingDeltaOperation(session, add=metric) for metric in o_session.reporting_configurations.metrics]
         return ret
 
     async def __asyncInit(self):

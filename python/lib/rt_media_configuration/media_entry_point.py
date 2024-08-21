@@ -66,6 +66,42 @@ a mime content type with an optional array of profile strings.
     def __ne__(self, other: "MediaEntryPoint") -> bool:
         return not (self == other)
 
+    def __lt__(self, other: "MediaEntryPoint") -> bool:
+        if self.__relative_path != other.__relative_path:
+            return self.__relative_path < other.__relative_path
+        if self.__content_type != other.__content_type:
+            return self.__content_type < other.__content_type
+        if self.__profiles is not None:
+            if other.__profiles is None:
+                return False
+            if len(self.__profiles) != len(other.__profiles):
+                return len(self.__profiles) < len(other.__profiles)
+            return sorted(self.__profiles) < sorted(other.__profiles)
+        elif other.__profiles is not None:
+            return True
+        return False
+
+    def __le__(self, other: "MediaEntryPoint") -> bool:
+        if self.__relative_path != other.__relative_path:
+            return self.__relative_path < other.__relative_path
+        if self.__content_type != other.__content_type:
+            return self.__content_type < other.__content_type
+        if self.__profiles is not None:
+            if other.__profiles is None:
+                return False
+            if len(self.__profiles) != len(other.__profiles):
+                return len(self.__profiles) < len(other.__profiles)
+            return sorted(self.__profiles) < sorted(other.__profiles)
+        elif other.__profiles is not None:
+            return True
+        return True
+
+    def __ge__(self, other: "MediaEntryPoint") -> bool:
+        return not (self < other)
+
+    def __gt__(self, other: "MediaEntryPoint") -> bool:
+        return not (self <= other)
+
     def __repr__(self) -> str:
         '''Python constructor string for this object'''
         ret = f'{self.__class__.__name__}({self.__relative_path!r}, {self.__content_type!r}'

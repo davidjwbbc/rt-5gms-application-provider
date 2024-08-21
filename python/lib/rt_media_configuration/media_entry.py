@@ -73,15 +73,21 @@ information will only be published via M8.
             return False
         if (self.__ingest_url_prefix != other.__ingest_url_prefix):
             return False
-        if (len(self.__distributions) != len(other.__distributions)):
-            return False
         if (self.__is_pull != other.__is_pull):
             return False
-        if (len(self.__app_distributions) != len(other.__app_distributions)):
+        if (len(self.__distributions) != len(other.__distributions)):
             return False
         if (sorted(self.__distributions) != sorted(other.__distributions)):
             return False
-        return (sorted(self.__app_distributions) == sorted(other.__app_distributions))
+        if self.__app_distributions is None and other.__app_distributions is not None:
+            return False
+        if self.__app_distributions is not None:
+            if other.__app_distributions is None:
+                return False
+            if (len(self.__app_distributions) != len(other.__app_distributions)):
+                return False
+            return (sorted(self.__app_distributions) == sorted(other.__app_distributions))
+        return True
 
     def __ne__(self, other: "MediaEntry") -> bool:
         return not (self == other)

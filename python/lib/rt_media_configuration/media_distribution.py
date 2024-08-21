@@ -66,6 +66,64 @@ This class models the distribution configurations for a MediaEntry.
     def __ne__(self, other: "MediaDistribution") -> bool:
         return not (self == other)
 
+    def __lt__(self, other: Optional["MediaDistribution"]) -> bool:
+        if other is None:
+            return False
+        if self.__domain_name_alias is not None:
+            if other.__domain_name_alias is None:
+                return False
+            if self.__domain_name_alias != other.__domain_name_alias:
+                return self.__domain_name_alias < other.__domain_name_alias
+        elif other.__domain_name_alias is not None:
+            return True
+        if self.__certificate_id is not None:
+            if other.__certificate_id is None:
+                return False
+            if self.__certificate_id != other.__certificate_id:
+                return self.__certificate_id < other.__certificate_id
+        elif other.__certificate_id is not None:
+            return True
+        if self.__entry_point is not None:
+            if other.__entry_point is None:
+                return False
+            if self.__entry_point != other.__entry_point:
+                return self.__entry_point < other.__entry_point
+        elif other.__entry_point is not None:
+            return True
+        return False
+
+    def __le__(self, other: Optional["MediaDistribution"]) -> bool:
+        if other is None:
+            return False
+        if self.__domain_name_alias is not None: 
+            if other.__domain_name_alias is None:
+                return False
+            if self.__domain_name_alias != other.__domain_name_alias:
+                return self.__domain_name_alias < other.__domain_name_alias
+        elif other.__domain_name_alias is not None:
+            return True
+        if self.__certificate_id is not None:
+            if other.__certificate_id is None:
+                return False
+            if self.__certificate_id != other.__certificate_id:
+                return self.__certificate_id < other.__certificate_id
+        elif other.__certificate_id is not None:
+            return True
+        if self.__entry_point is not None:
+            if other.__entry_point is None:
+                return False
+            if self.__entry_point != other.__entry_point:
+                return self.__entry_point < other.__entry_point
+        elif other.__entry_point is not None:
+            return True
+        return True
+
+    def __ge__(self, other: Optional["MediaDistribution"]) -> bool:
+        return not (self < other)
+
+    def __gt__(self, other: Optional["MediaDistribution"]) -> bool:
+        return not (self <= other)
+
     def __repr__(self) -> str:
         '''Python constructor string for this object'''
         ret = f'{self.__class__.__name__}('

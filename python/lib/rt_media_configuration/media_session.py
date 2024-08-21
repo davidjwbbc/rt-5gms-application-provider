@@ -49,9 +49,9 @@ class MediaSession:
 This class models a 3GPP TS 26.512 ProvisioningSession. The ProvisioningSession information will be published via M5.
 '''
 
-    def __init__(self, is_downlink: bool,
+    def __init__(self, is_downlink: bool, external_app_id: str,
                  ident: Optional[str] = None, provisioning_session_id: Optional[str] = None,
-                 external_app_id: Optional[str] = None, asp_id: Optional[str] = None,
+                 asp_id: Optional[str] = None,
                  certificates: Optional[Dict[str, MediaServerCertificate]] = None,
                  media_entry: Optional[MediaEntry] = None,
                  reporting_configurations: Optional[MediaReportingConfiguration] = None,
@@ -61,9 +61,9 @@ This class models a 3GPP TS 26.512 ProvisioningSession. The ProvisioningSession 
         When this object is synchronised with the 5GMS AF it will gain a `provisioning_session_id` attribute.
 
         :param is_downlink: True if this session is for downlink media.
+        :param external_app_id: The external application id this session should be associated with.
         :param ident: A local identifier for quick reference (not published).
         :param provisioning_session_id: The identifier for this session assigned by the AF.
-        :param external_app_id: The external application id this session should be associated with.
         :param asp_id: The Application Service Provider identifier.
         :param certificates: The server certificates for this session.
         :param media_entry: The optional MediaEntry for this session.
@@ -74,9 +74,9 @@ This class models a 3GPP TS 26.512 ProvisioningSession. The ProvisioningSession 
         if ident is None:
             ident = str(uuid.uuid4())
         self.is_downlink = is_downlink
+        self.external_app_id = external_app_id
         self.id = ident
         self.provisioning_session_id = provisioning_session_id
-        self.external_app_id = external_app_id
         self.asp_id = asp_id
         self.certificates = certificates
         self.media_entry = media_entry
@@ -104,6 +104,17 @@ This class models a 3GPP TS 26.512 ProvisioningSession. The ProvisioningSession 
             return False
         if self.__asp_id != other.__asp_id:
             return False
+        if self.__media_entry is not None:
+            if other.__media_entry is None:
+                return False
+            if self.__media_entry.ingest_url_prefix != other.__media_entry.ingest_url_prefix:
+                return False
+            if self.__media_entry.is_pull != other.__media_entry.is_pull:
+                return False
+            if self.__media_entry.name != other.__media_entry.name:
+                return False
+        elif other.__media_entry is not None:
+            return False
         return True
 
     def __ne__(self, other: "MediaSession") -> bool:
@@ -111,13 +122,11 @@ This class models a 3GPP TS 26.512 ProvisioningSession. The ProvisioningSession 
 
     def __repr__(self) -> str:
         '''Python constructor string for this object'''
-        ret = f'{self.__class__.__name__}(is_downlink={self.__is_downlink!r}'
+        ret = f'{self.__class__.__name__}(is_downlink={self.__is_downlink!r}, external_app_id={self.__external_app_id!r}'
         if self.__id is not None:
             ret += f', ident={self.__id!r}'
         if self.__provisioning_session_id is not None:
             ret += f', provisioning_session_id={self.__provisioning_session_id!r}'
-        if self.__external_app_id is not None:
-            ret += f', external_app_id={self.__external_app_id!r}'
         if self.__asp_id is not None:
             ret += f', asp_id={self.__asp_id!r}'
         if self.__certificates is not None:
@@ -153,12 +162,17 @@ This class models a 3GPP TS 26.512 ProvisioningSession. The ProvisioningSession 
     @staticmethod
     def fromJSONObject(obj: dict) -> "MediaSession":
         kwargs = {}
+        mand_fields = ['appId']
         reporting = None
         media_entry = None
+        external_app_id = None
         is_downlink = True
         for k,v in obj.items():
             if k == 'downlink':
                 is_downlink = v
+            elif k == 'appId':
+                external_app_id = v
+                mand_fields.remove(k)
             elif k == 'name':
                 if media_entry is None:
                     if 'ingestURL' not in obj or 'distributionConfigurations' not in obj or len(obj['distributionConfigurations']) == 0:
@@ -223,14 +237,20 @@ This class models a 3GPP TS 26.512 ProvisioningSession. The ProvisioningSession 
                     if mdp.policy_template_id is None:
                         mdp.policy_template_id = extId
                     kwargs['dynamic_policies'][extId] = mdp
+            elif k == 'aspId':
+                kwargs['asp_id'] = v
             else:
                 raise TypeError(f'MediaSession: JSON field "{k}" not understood')
-        return MediaSession(is_downlink, **kwargs)
+        if len(mand_fields) > 0:
+            raise TypeError(f'MediaSession: mandatory fields {mand_fields!r} are missing')
+        return MediaSession(is_downlink, external_app_id, **kwargs)
 
     def jsonObject(self) -> dict:
-        obj = {}
+        obj = {'appId': self.__external_app_id}
         if not self.__is_downlink:
             obj['downlink'] = False
+        if self.__asp_id is not None:
+            obj['aspId'] = self.__asp_id
         if self.__media_entry is not None:
             obj['name'] = self.__media_entry.name
             obj['ingestURL'] = self.__media_entry.ingest_url_prefix
@@ -313,19 +333,18 @@ This class models a 3GPP TS 26.512 ProvisioningSession. The ProvisioningSession 
         self.__provisioning_session_id = value
 
     @property
-    def external_app_id(self) -> Optional[str]:
-        self.__external_app_id
+    def external_app_id(self) -> str:
+        return self.__external_app_id
 
     @external_app_id.setter
-    def external_app_id(self, value: Optional[str]):
-        if value is not None:
-            if not isinstance(value, str):
-                raise TypeError('MediaSession.external_app_id must be either None or a str')
+    def external_app_id(self, value: str):
+        if not isinstance(value, str):
+            raise TypeError('MediaSession.external_app_id must be a str')
         self.__external_app_id = value
 
     @property
     def asp_id(self) -> Optional[str]:
-        self.__asp_id
+        return self.__asp_id
 
     @asp_id.setter
     def asp_id(self, value: Optional[str]):
@@ -336,7 +355,7 @@ This class models a 3GPP TS 26.512 ProvisioningSession. The ProvisioningSession 
 
     @property
     def certificates(self) -> Optional[Dict[str, MediaServerCertificate]]:
-        self.__certificates
+        return self.__certificates
 
     @certificates.setter
     def certificates(self, value: Optional[Dict[str, MediaServerCertificate]]):
@@ -422,18 +441,18 @@ This class models a 3GPP TS 26.512 ProvisioningSession. The ProvisioningSession 
 
     def unsetConsumptionReportingConfiguration(self):
         self.__reporting_configurations.consumption = None
-        if self.__reporting_configurations.metrics is None or len(self.__reporting_configurations.metrics) == 0:
+        if self.__reporting_configurations.metrics is None:
             self.__reporting_configurations = None
 
     def addMetricsReportingConfiguration(self, value: MediaMetricsReportingConfiguration):
         if self.__reporting_configurations is None:
             self.__reporting_configurations = MediaReportingConfiguration()
-        self.__reporting_configurations.addMetricsReportingConfiguration(value)
+        self.__reporting_configurations.addMetricsReporting(value)
 
     def removeMetricsReportingConfiguration(self, value: MediaMetricsReportingConfiguration) -> bool:
         if self.__reporting_configurations is None:
             return False
-        ret = self.__reporting_configurations.removeMetricsReportingConfiguration(value)
+        ret = self.__reporting_configurations.removeMetricsReporting(value)
         if self.__reporting_configurations.metrics is None and self.__reporting_configurations.consumption is None:
             self.__reporting_configurations = None
         return ret
