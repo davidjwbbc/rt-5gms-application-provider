@@ -74,8 +74,12 @@ in the MediaConfiguration.
                 if session.media_entry is not None:
                     for d in session.media_entry.distributions:
                         if d.certificate_id is not None:
-                            if session.certificateByLocalIdent(d.certificate_id) is None:
-                                session.addCertificate(MediaServerCertificate(local_ident=d.certificate_id))
+                            cert = session.certificateByLocalIdent(d.certificate_id)
+                            if cert is None:
+                                cert = MediaServerCertificate(local_ident=d.certificate_id)
+                                session.addCertificate(cert)
+                            if d.domain_name_alias is not None:
+                                cert.addDomainName(d.domain_name_alias)
                 await model.addMediaSession(session)
             for vod_media in self.__streams["vodMedia"]:
                 distrib_obj = vod_media.copy()

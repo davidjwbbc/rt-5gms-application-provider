@@ -371,9 +371,11 @@ This class models a 3GPP TS 26.512 ProvisioningSession. The ProvisioningSession 
             self.__certificates = {}
         self.__certificates[value.identity()] = value
 
-    def removeCertificate(self, *, ident: Optional[str] = None, certificate: Optional[MediaServerCertificate] = None):
+    def removeCertificate(self, *, ident: Optional[str] = None, certificate: Optional[MediaServerCertificate] = None) -> bool:
         if (ident is None and certificate is None) or (ident is not None and certificate is not None):
             raise RuntimeError('MediaSession.removeCertificate takes either an ident or a certificate')
+        if self.__certificates is None:
+            return False
         if ident is not None:
             if ident in self.__certificates:
                 del self.__certificates[ident]

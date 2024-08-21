@@ -30,7 +30,7 @@ This module provides the MediaServerCertificate class which models AS
 certificates attached to a MediaSession.
 '''
 
-from typing import Optional
+from typing import Optional, Iterable, List
 
 class MediaServerCertificate:
     '''MediaServerCertificate class
@@ -38,9 +38,10 @@ class MediaServerCertificate:
 This class models AS certificates which are part of a MediaSession.
 '''
 
-    def __init__(self, local_ident: Optional[str] = None, certificate_id: Optional[str] = None, public_cert: Optional[str] = None):
+    def __init__(self, local_ident: Optional[str] = None, certificate_id: Optional[str] = None, domain_names: Optional[Iterable[str]] = None, public_cert: Optional[str] = None):
         self.id = local_ident
         self.certificate_id = certificate_id
+        self.domain_names = domain_names
         self.public_cert = public_cert
 
     def __await__(self):
@@ -53,6 +54,15 @@ This class models AS certificates which are part of a MediaSession.
         if self.__id != other.__id:
             return False
         if self.__certificate_id != other.__certificate_id:
+            return False
+        if self.__domain_names is not None:
+            if other.__domain_names is None:
+                return False
+            if len(self.__domain_names) != len(other.__domain_names):
+                return False
+            if sorted(self.__domain_names) != sorted(other.__domain_names):
+                return False
+        elif other.__domain_names is not None:
             return False
         return self.__public_cert == other.__public_cert
 
@@ -67,6 +77,9 @@ This class models AS certificates which are part of a MediaSession.
             np = ', '
         if self.__certificate_id is not None:
             ret += f'{np}certificate_id={self.__certificate_id!r}'
+            np = ', '
+        if self.__domain_names is not None:
+            ret += f'{np}domain_names={self.__domain_names!r}'
             np = ', '
         if self.__public_cert is not None:
             ret += f'{np}public_cert={self.__public_cert!r}'
@@ -92,6 +105,8 @@ This class models AS certificates which are part of a MediaSession.
                 kwargs['local_ident'] = v
             elif k == 'certificateId':
                 kwargs['certificate_id'] = v
+            elif k == 'domainNames':
+                kwargs['domain_names'] = v
             elif k == 'publicCert':
                 kwargs['public_cert'] = v
             else:
@@ -104,6 +119,8 @@ This class models AS certificates which are part of a MediaSession.
             obj['localId'] = self.__id
         if self.__certificate_id is not None:
             obj['certificateId'] = self.__certificate_id
+        if self.__domain_names is not None:
+            obj['domainNames'] = self.__domain_names
         if self.__public_cert is not None:
             obj['publicCert'] = self.__public_cert
         return obj
@@ -134,6 +151,35 @@ This class models AS certificates which are part of a MediaSession.
             if not isinstance(value, str):
                 raise TypeError('MediaServerCertificate.certificate_id must be either None or a str')
         self.__certificate_id = value
+
+    @property
+    def domain_names(self) -> Optional[List[str]]:
+        return self.__domain_names
+
+    @domain_names.setter
+    def domain_names(self, value: Optional[List[str]]):
+        if value is not None:
+            if not isinstance(value,list):
+                value = list(value)
+            if not all(isinstance(v,str) for v in value):
+                raise TypeError('MediaServerCertificate.domain_names can only hold str objects')
+            if len(value) == 0:
+                value = None
+        self.__domain_names = value
+
+    def addDomainName(self, value: str):
+        if self.__domain_names is None:
+            self.__domain_names = []
+        if value not in self.__domain_names:
+            self.__domain_names += [value]
+
+    def removeDomainName(self, value: str) -> bool:
+        if self.__domain_names is None:
+            return False
+        ret = self.__domain_names.remove(value)
+        if ret and len(self.__domain_names) == 0:
+            self.__domain_names = None
+        return ret
 
     @property
     def public_cert(self) -> Optional[str]:

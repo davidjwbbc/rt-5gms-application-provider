@@ -199,6 +199,22 @@ configuration with the 5GMS AF.
         ret += [await MediaSessionDeltaOperation(self, remove=session) for session in to_del]
         # check sub-structures of sessions we have for changes
         for session,o_session in have:
+            if session.certificates is None and o_session.certificates is not None:
+                ret += [await MediaServerCertificateDeltaOperation(session, add=(cert_id,cert)) for cert_id,cert in o_session.certificates.items()]
+            elif session.certificates is not None:
+                if o_session.certificates is None:
+                    ret += [await MediaServerCertificateDeltaOperation(session, remove=cert_id) for cert_id in session.certificates.keys()]
+                else:
+                    certs_add = o_session.certificates.copy()
+                    certs_del = []
+                    for cert_id in session.certificates.keys():
+                        if cert_id in certs_add:
+                            del certs_add[cert_id]
+                        else:
+                            certs_del += [cert_id]
+                    ret += [await MediaServerCertificateDeltaOperation(session, add=(cid,cert)) for cid,cert in certs_add.items()]
+                    ret += [await MediaServerCertificateDeltaOperation(session, remove=cid) for cid in certs_del]
+                
             if session.media_entry is None and o_session.media_entry is not None:
                 ret += [await MediaEntryDeltaOperation(session, add=o_session.media_entry)]
             elif session.media_entry is not None:

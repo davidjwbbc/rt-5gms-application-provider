@@ -81,10 +81,13 @@ class MediaSessionDeltaOperation(DeltaOperation):
             if self.session.provisioning_session_id is None:
                 return False
             if self.session.certificates is not None:
-                for cert_id,cert in self.session.certificates.items():
+                for cert_id,cert in list(self.session.certificates.items()):
                     op = await MediaServerCertificateDeltaOperation(self.session, add=(cert_id,cert))
                     if not await op.apply_delta(m1_session, update_container=False):
                         return False
+                    if cert.certificate_id != cert_id:
+                        self.session.removeCertificate(ident=cert_id)
+                        self.session.addCertificate(cert)
             if self.session.media_entry is not None:
                 if not await (await MediaEntryDeltaOperation(self.session, add=self.session.media_entry)).apply_delta(m1_session, update_container=False):
                     return False
@@ -104,10 +107,10 @@ class MediaSessionDeltaOperation(DeltaOperation):
                     if not await op.apply_delta(m1_session, update_container=False):
                         return False
             if update_container:
-                self.__config.addMediaSession(self.session)
+                await self.__config.addMediaSession(self.session)
         else:
             if not await m1_session.provisioningSessionDestroy(self.session.identity()):
                 return False
             if update_container:
-                return self.__config.removeMediaSession(entry=self.session)
+                return await self.__config.removeMediaSession(entry=self.session)
         return True

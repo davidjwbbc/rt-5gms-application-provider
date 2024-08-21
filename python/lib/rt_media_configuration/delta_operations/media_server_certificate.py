@@ -70,13 +70,13 @@ class MediaServerCertificateDeltaOperation(DeltaOperation):
     async def apply_delta(self, m1_session: M1Session, update_container: bool = True) -> bool:
         if self.__is_add:
             # add certificate to session
-            cert_id = await m1_session.createNewCertificate(self.session.identity(), self.__domain_names)
+            cert_id = await m1_session.createNewCertificate(self.session.identity(), self.__cert.domain_names)
             if cert_id is None:
                 return False
             self.__cert.certificate_id = cert_id
-            if self.__cert_id != cert_id:
-                self.session.removeCertificate(ident=self.__cert_id)
             if update_container:
+                if self.__cert_id != cert_id:
+                    self.session.removeCertificate(ident=self.__cert_id)
                 self.session.addCertificate(self.__cert)
         else:
             # remove certificate from session

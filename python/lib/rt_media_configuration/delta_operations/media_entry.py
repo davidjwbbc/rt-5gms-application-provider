@@ -91,7 +91,7 @@ class MediaEntryDeltaOperation(DeltaOperation):
         if distrib.entry_point is not None:
             ret['entryPoint'] = MediaEntryDeltaOperation.__entryPoint3GPPObject(distrib.entry_point)
         if distrib.certificate_id is not None:
-            cert = session.serverCertificateByIdent(distrib.certificate_id)
+            cert = session.certificateByIdent(distrib.certificate_id)
             if cert is not None:
                 ret['certificateId'] = cert.identity()
             else:
