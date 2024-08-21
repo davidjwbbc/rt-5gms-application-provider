@@ -67,18 +67,20 @@ class MediaConsumptionReportingDeltaOperation(DeltaOperation):
         ret += ')'
         return ret
     
-    async def apply_delta(self, m1_session: M1Session) -> bool:
+    async def apply_delta(self, m1_session: M1Session, update_container: bool = True) -> bool:
         '''Apply this delta to the session via M1Session
         '''
         if self.__is_add:
             crc = self.__consumptionReportingConfiguration3GPPObject(self.__mcrc)
             if not await m1_session.setOrUpdateConsumptionReporting(self.session.identity(), crc):
                 return False
-            self.session.setConsumptionReportingConfiguration(self.__mcrc)
+            if update_container:
+                self.session.setConsumptionReportingConfiguration(self.__mcrc)
         else:
             if not await m1_session.consumptionReportingConfigurationDelete(self.session.identity()):
                 return False
-            self.session.unsetConsumptionReportingConfiguration()
+            if update_container:
+                self.session.unsetConsumptionReportingConfiguration()
         return True
 
     @staticmethod

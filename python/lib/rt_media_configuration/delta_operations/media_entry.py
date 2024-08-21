@@ -69,25 +69,27 @@ class MediaEntryDeltaOperation(DeltaOperation):
         ret += f')'
         return ret
 
-    async def apply_delta(self, m1_session: M1Session) -> bool:
+    async def apply_delta(self, m1_session: M1Session, update_container: bool = True) -> bool:
         if self.__is_remove:
             if not await m1_session.contentHostingConfigurationRemove(self.session.provisioning_session_id):
                 return False
-            self.session.media_entry = None
+            if update_container:
+                self.session.media_entry = None
         elif self.__is_add:
-            chc = {'name': self.__media_entry.name, 'ingestConfiguration': {'pull': self.session.is_pull, 'baseURL': self.__media_entry.ingest_url_prefix}, distributionConfigurations: [self.__distribution3GPPObject(dc, self.session) for dc in self.__media_entry.distributions]}
+            chc = {'name': self.__media_entry.name, 'ingestConfiguration': {'pull': self.__media_entry.is_pull, 'baseURL': self.__media_entry.ingest_url_prefix}, 'distributionConfigurations': [self.__distribution3GPPObject(dc, self.session) for dc in self.__media_entry.distributions]}
             if not await m1_session.contentHostingConfigurationCreate(self.session.provisioning_session_id, chc):
                 return False
-            self.session.media_entry = self.__media_entry
+            if update_container:
+                self.session.media_entry = self.__media_entry
         return True
 
     @staticmethod
     def __distribution3GPPObject(distrib: MediaDistribution, session: MediaSession) -> DistributionConfiguration:
         ret = {}
         if distrib.domain_name_alias is not None:
-            ret['domainNameAlias'] = ditrib.domain_name_alias
+            ret['domainNameAlias'] = distrib.domain_name_alias
         if distrib.entry_point is not None:
-            ret['entryPoint'] = self.__entryPoint3GPPObject(distrib.entry_point)
+            ret['entryPoint'] = MediaEntryDeltaOperation.__entryPoint3GPPObject(distrib.entry_point)
         if distrib.certificate_id is not None:
             cert = session.serverCertificateByIdent(distrib.certificate_id)
             if cert is not None:

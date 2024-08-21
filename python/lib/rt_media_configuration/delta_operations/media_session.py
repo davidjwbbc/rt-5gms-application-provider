@@ -74,30 +74,40 @@ class MediaSessionDeltaOperation(DeltaOperation):
         ret += f'{self.session!r})'
         return ret
 
-    async def apply_delta(self, m1_session: M1Session) -> bool:
+    async def apply_delta(self, m1_session: M1Session, update_container: bool = True) -> bool:
         if self.__is_add:
             prov_type = {True: PROVISIONING_SESSION_TYPE_DOWNLINK, False: PROVISIONING_SESSION_TYPE_UPLINK}[self.session.is_downlink]
             self.session.provisioning_session_id = await m1_session.provisioningSessionCreate(prov_type, self.session.external_app_id, self.session.asp_id)
             if self.session.provisioning_session_id is None:
                 return False
             if self.session.certificates is not None:
-                if not all(await MediaServerCertificateDeltaOperation(self.session, add=(cert_id,cert)) for cert_id,cert in self.session.certificates.items()):
-                    return False
+                for cert_id,cert in self.session.certificates.items():
+                    op = await MediaServerCertificateDeltaOperation(self.session, add=(cert_id,cert))
+                    if not await op.apply_delta(m1_session, update_container=False):
+                        return False
             if self.session.media_entry is not None:
-                if not await MediaEntryDeltaOperation(self.session, add=self.session.media_entry).apply_delta(m1_session):
+                if not await (await MediaEntryDeltaOperation(self.session, add=self.session.media_entry)).apply_delta(m1_session, update_container=False):
                     return False
             if self.session.reporting_configurations is not None and self.session.reporting_configurations.consumption is not None:
-                if not await MediaConsumptionReportingDeltaOperation(self.session, add=self.session.reporting_configurations.consumption).apply_delta(m1_session):
+                if not await (await MediaConsumptionReportingDeltaOperation(self.session, add=self.session.reporting_configurations.consumption)).apply_delta(m1_session, update_container=False):
                     return False
             if self.session.reporting_configurations is not None and self.session.reporting_configurations.metrics is not None:
-                if not all(await MediaMetricsReportingDeltaOperation(self.session, add=mr).apply_delta(m1_session) for mr in self.session.reporting_configurations.metrics):
-                    return False
+                for mr in self.session.reporting_configurations.metrics:
+                    op = await MediaMetricsReportingDeltaOperation(self.session, add=mr)
+                    if not await op.apply_delta(m1_session, update_container=False):
+                        return False
             if self.session.dynamic_policies is not None:
-                if not all(await MediaDynamicPolicyDeltaOperation(self.session, add=(dp_id, dp)).apply_delta(m1_session) for dp_id, dp in self.session.dynamic_policies.items()):
-                    return False
-            self.__config.addMediaSession(self.session)
+                for dp_id, dp in self.session.dynamic_policies.items():
+                    if dp.id is None:
+                        dp.id = dp_id
+                    op = await MediaDynamicPolicyDeltaOperation(self.session, add=dp)
+                    if not await op.apply_delta(m1_session, update_container=False):
+                        return False
+            if update_container:
+                self.__config.addMediaSession(self.session)
         else:
             if not await m1_session.provisioningSessionDestroy(self.session.identity()):
                 return False
-            return self.__config.removeMediaSession(entry=self.session)
+            if update_container:
+                return self.__config.removeMediaSession(entry=self.session)
         return True

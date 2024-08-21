@@ -70,7 +70,7 @@ class MediaMetricsReportingDeltaOperation(DeltaOperation):
         ret += ')'
         return ret
 
-    async def apply_delta(self, m1_session: M1Session) -> bool:
+    async def apply_delta(self, m1_session: M1Session, update_container: bool = True) -> bool:
         '''Apply this delta to the session via M1Session
         '''
         if self.__is_add:
@@ -79,11 +79,13 @@ class MediaMetricsReportingDeltaOperation(DeltaOperation):
             if mrc_id is None:
                 return False
             self.__mmrc.metrics_reporting_configuration_id = mrc_id
-            self.session.addMetricsReportingConfiguration(self.__mmrc)
+            if update_container:
+                self.session.addMetricsReportingConfiguration(self.__mmrc)
         else:
             if not await m1_session.metricsReportingConfigurationDelete(self.session.identity(), self.__mmrc_id):
                 return False
-            self.session.removeMetricsReportingConfiguration(self.__mmrc_id)
+            if update_container:
+                self.session.removeMetricsReportingConfiguration(self.__mmrc_id)
         return True
 
     @staticmethod
@@ -93,7 +95,7 @@ class MediaMetricsReportingDeltaOperation(DeltaOperation):
             mrc['metricsReportingConfigurationId'] = mmrc.metrics_reporting_configuration_id
         if mmrc.scheme is not None:
             mrc['scheme'] = mmrc.scheme
-        if mmrc.dnn is not None:
+        if mmrc.data_network_name is not None:
             mrc['dataNetworkName'] = mmrc.data_network_name
         if mmrc.reporting_interval is not None:
             mrc['reportingInterval'] = mmrc.reporting_interval

@@ -45,7 +45,7 @@ class DeltaOperation:
         self.log = logging.getLogger(self.__class__.__name__)
 
     def __await__(self):
-        return self._asyncInit().__await__
+        return self._asyncInit().__await__()
 
     async def _asyncInit(self):
         return self
@@ -56,7 +56,7 @@ class DeltaOperation:
     def __repr__(self):
         return f'{self.__class__.__name__}(session={self.session!r})'
 
-    async def apply_delta(self, m1_session: M1Session) -> bool:
+    async def apply_delta(self, m1_session: M1Session, update_container: bool = True) -> bool:
         '''Apply this delta to the session via M1Session
         '''
         raise NotImplementedError('DeltaOperation apply_delta method must be implemented')
