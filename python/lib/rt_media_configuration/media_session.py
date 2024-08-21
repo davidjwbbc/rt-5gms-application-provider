@@ -216,7 +216,13 @@ This class models a 3GPP TS 26.512 ProvisioningSession. The ProvisioningSession 
                 for mr_obj in v:
                     reporting.addMetricsReporting(MediaMetricsReportingConfiguration.fromJSONObject(mr_obj))
             elif k == 'policies':
-                kwargs['dynamic_policies'] = {extId: MediaDynamicPolicy.fromJSONObject(policy) for extId, policy in v.items()}
+                kwargs['dynamic_policies'] = {}
+                for extId, policy in v.items():
+                    mdp = MediaDynamicPolicy.fromJSONObject(policy)
+                    mdp.id = extId
+                    if mdp.policy_template_id is None:
+                        mdp.policy_template_id = extId
+                    kwargs['dynamic_policies'][extId] = mdp
             else:
                 raise TypeError(f'MediaSession: JSON field "{k}" not understood')
         return MediaSession(is_downlink, **kwargs)

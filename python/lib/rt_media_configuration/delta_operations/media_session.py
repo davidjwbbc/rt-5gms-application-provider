@@ -48,14 +48,16 @@ class MediaSessionDeltaOperation(DeltaOperation):
     '''DeltaOperation for a MediaSession
     '''
 
-    def __init__(self, *, add: Optional[MediaSession] = None,
+    def __init__(self, config: "MediaConfiguration", *, add: Optional[MediaSession] = None,
                  remove: Optional[MediaSession] = None):
+        from ..media_configuration import MediaConfiguration
         if (add is None and remove is None) or (add is not None and remove is not None):
             raise ValueError('MediaSessionDeltaOperation must be initialised as an "add" or "remove" operation')
         if add is not None:
             super().__init__(add)
         else:
             super().__init__(remove)
+        self.__config = config
         self.__is_add = add is not None
 
     def __str__(self):
@@ -93,7 +95,9 @@ class MediaSessionDeltaOperation(DeltaOperation):
             if self.session.dynamic_policies is not None:
                 if not all(await MediaDynamicPolicyDeltaOperation(self.session, add=(dp_id, dp)).apply_delta(m1_session) for dp_id, dp in self.session.dynamic_policies.items()):
                     return False
+            self.__config.addMediaSession(self.session)
         else:
             if not await m1_session.provisioningSessionDestroy(self.session.identity()):
                 return False
+            return self.__config.removeMediaSession(entry=self.session)
         return True

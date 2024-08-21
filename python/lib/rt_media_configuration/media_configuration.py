@@ -136,7 +136,7 @@ configuration with the 5GMS AF.
         self.__model["sessions"][session.id] = session
         return True
 
-    async def removeMediaEntry(self, *, session_id: Optional[str] = None, entry: Optional[MediaSession] = None) -> bool:
+    async def removeMediaSession(self, *, session_id: Optional[str] = None, entry: Optional[MediaSession] = None) -> bool:
         if session_id is None and entry is None:
             return False
         if session_id is not None:
@@ -200,8 +200,8 @@ configuration with the 5GMS AF.
                     break
             else:
                 to_add += [o_session]
-        ret += [MediaSessionDeltaOperation(add=session) for session in to_add]
-        ret += [MediaSessionDeltaOperation(remove=session) for session in to_del]
+        ret += [MediaSessionDeltaOperation(self, add=session) for session in to_add]
+        ret += [MediaSessionDeltaOperation(self, remove=session) for session in to_del]
         # check sub-structures of sessions we have for changes
         for session,o_session in have:
             if session.media_entry is None and o_session.media_entry is not None:
