@@ -1,0 +1,18 @@
+name: deploy_development
+
+on:
+    push:
+        branches:
+            - 'development'
+
+jobs:
+    deploy_staging:
+        uses: ./.github/workflows/linode-deployment.yml
+        with:
+            ENV_NAME: development
+            WEB_SERVER_PATH: '~/webui-staging/'
+            PORT: '8001'
+        secrets:
+            LINODE_IP: ${{ secrets.LINODE_IP }}
+            USER: ${{ secrets.USER }}
+            PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
