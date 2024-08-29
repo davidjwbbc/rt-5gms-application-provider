@@ -1,0 +1,67 @@
+name: linode-deployment
+
+on:
+    workflow_call:
+        inputs:
+            ENV_NAME:
+                required: true
+                type: string
+            WEB_SERVER_PATH:
+                required: true
+                type: string
+            PORT:
+                required: true
+                type: string
+        secrets:
+            LINODE_IP:
+                required: true
+            USER:
+                required: true
+            PRIVATE_KEY:
+                required: true
+
+jobs:
+    deploy:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Set up SSH connection
+              uses: webfactory/ssh-agent@v0.5.3
+              with:
+                ssh-private-key: ${{secrets.PRIVATE_KEY}}
+
+            - name: List added SSH keys (for debugging)
+              run: ssh-add -l
+
+            - name: Deploy to Linode instance
+              env:
+                LINODE_IP: ${{secrets.LINODE_IP}}
+                USER: ${{secrets.USER}}
+                WEB_SERVER_PATH: ${{inputs.WEB_SERVER_PATH}}
+                ENV_NAME: ${{inputs.ENV_NAME}}
+                PORT: ${{inputs.PORT}}
+              run: |
+                echo "Starting deployment for ${ENV_NAME} environment on port ${PORT}"
+
+                ssh -v -o StrictHostKeyChecking=no $USER@$LINODE_IP << EOF
+                  set -e
+                  echo "Connected to Linode server"
+                  echo "Deploying for ${ENV_NAME} branch"
+
+                  cd $WEB_SERVER_PATH
+                  if [ ! -d ".git" ]; then
+                    echo "Error: .git directory not found in $WEB_SERVER_PATH"
+                    exit 1
+                  fi
+                  git pull origin $ENV_NAME || { echo 'Git pull for ${ENV_NAME} failed'; exit 1; }
+                  echo "Successfully updated ${ENV_NAME} code"
+                  echo "Accessing management-ui directory"
+                  cd $WEB_SERVER_PATH/management-ui
+                  pkill -f "uvicorn.*${PORT}" || echo "No process to kill on port ${PORT}"
+                  echo "Clearing port ${PORT}"
+                  
+                  nohup uvicorn server:app --host 127.0.0.1 --port ${PORT} > ${WEB_SERVER_PATH}/nohup.out 2>&1 &
+                  echo "Activated FastAPI server for ${ENV_NAME} environment on port ${PORT}"
+
+                  echo "Deployment completed."
+                EOF

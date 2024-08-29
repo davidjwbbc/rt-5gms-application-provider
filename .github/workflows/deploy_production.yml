@@ -1,0 +1,18 @@
+name: deploy_production
+
+on:
+    push:
+        branches:
+            - 'master'
+
+jobs:
+    deploy_production:
+        uses: ./.github/workflows/linode-deployment.yml
+        with:
+            ENV_NAME: master
+            WEB_SERVER_PATH: '~/webui-production/'
+            PORT: '8000'
+        secrets:
+            LINODE_IP: ${{ secrets.LINODE_IP }}
+            USER: ${{ secrets.USER }}
+            PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
