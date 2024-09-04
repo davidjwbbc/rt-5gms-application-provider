@@ -29,7 +29,7 @@ These types can be used in static type checking in Python 3.
 import enum
 import json
 import string
-from typing import List, Literal, TypedDict, Union
+from typing import List, Literal, TypedDict, Union, Optional
 
 def wrapped_default(self, obj):
     return getattr(obj.__class__, "__jsontype__", wrapped_default.default)(obj)
@@ -440,11 +440,14 @@ class Snssai(SnssaiMandatory, total=False):
     sd: str
 
     @staticmethod
-    def validate(snssai: "Snssai", json: str) -> bool:
+    def validate(snssai: "Snssai", json: Optional[str] = None) -> bool:
         # check mandatory fields presence
         for mandatory_field in SnssaiMandatory.__required_keys__:
             if mandatory_field not in snssai:
-                raise TypeError(f'Snssai must contain a {mandatory_field} field: {json}')
+                if json is not None:
+                    raise TypeError(f'Snssai must contain a {mandatory_field} field: {json}')
+                else:
+                    raise TypeError(f'Snssai must contain a {mandatory_field} field')
 
         # convert enums
         #asc['?'] = ???(asc['?'])
@@ -606,7 +609,7 @@ class AppSessionContext(TypedDict, total=False):
         return AppSessionContext(asc)
 
     @staticmethod
-    def validate(asc: "AppSessionContext", json: str) -> bool:
+    def validate(asc: "AppSessionContext", json: Optional[str] = None) -> bool:
         # check mandatory fields presence
         #for mandatory_field in AppSessionContextMandatory.__required_keys__:
         #    if mandatory_field not in pt:
@@ -668,11 +671,14 @@ class M1QoSSpecification(TypedDict, total=False):
         return M1QoSSpecification(qs)
 
     @staticmethod
-    def validate(qs: "M1QoSSpecification", json: str) -> bool:
+    def validate(qs: "M1QoSSpecification", json: Optional[str] = None) -> bool:
         # check mandatory fields presence
         #for mandatory_field in AppSessionContextMandatory.__required_keys__:
         #    if mandatory_field not in pt:
-        #        raise TypeError(f'AppSessionContext must contain a {mandatory_field} field: {json}')
+        #        if json is not None:
+        #            raise TypeError(f'AppSessionContext must contain a {mandatory_field} field: {json}')
+        #        else:
+        #            raise TypeError(f'AppSessionContext must contain a {mandatory_field} field')
 
         # convert enums
         #asc['?'] = ???(asc['?'])
@@ -745,11 +751,11 @@ class ChargingSpecification(TypedDict, total=False):
             cs = json.loads(cs_json)
         except json.JSONDecodeError as err:
             raise ValueError(f'Unable to parse JSON from: {cs_json}')
-        ChargingSpecification.validate(cs)
+        ChargingSpecification.validate(cs, cs_json)
         return ChargingSpecification(cs)
 
     @staticmethod
-    def validate(cs: dict, json: str) -> bool:
+    def validate(cs: dict, json: Optional[str] = None) -> bool:
         '''Validate a dict as a ChargingSpecification
         '''
         # convert enums
@@ -757,13 +763,22 @@ class ChargingSpecification(TypedDict, total=False):
             cs['sponStatus'] = SponsoringStatus[cs['sponStatus']]
         # check types
         if 'sponId' in cs and not isinstance(cs['sponId'], str):
-            raise ValueError(f'Sponsor ID should be a string in ChargingSpecification: {json}')
+            if json is not None:
+                raise ValueError(f'Sponsor ID should be a string in ChargingSpecification: {json}')
+            else:
+                raise ValueError('Sponsor ID should be a string in ChargingSpecification')
         if 'gpsi' in cs:
             if not isinstance(cs['gpsi'], list):
-                raise ValueError(f'GPSI in ChargingSpecification should be a list when present: {json}')
+                if json is not None:
+                    raise ValueError(f'GPSI in ChargingSpecification should be a list when present: {json}')
+                else:
+                    raise ValueError('GPSI in ChargingSpecification should be a list when present')
             for v in cs['gpsi']:
                 if not isinstance(v, str):
-                    raise ValueError(f'GPSI list in ChargingSpecification should only contain strings: {json}')
+                    if json is not None:
+                        raise ValueError(f'GPSI list in ChargingSpecification should only contain strings: {json}')
+                    else:
+                        raise ValueError('GPSI list in ChargingSpecification should only contain strings')
         return True
 
     @staticmethod
@@ -815,11 +830,14 @@ class PolicyTemplate(PolicyTemplateMandatory, total=False):
         return PolicyTemplate(pt)
 
     @staticmethod
-    def validate(pt: "PolicyTemplate", policy_template_json: str) -> bool:
+    def validate(pt: "PolicyTemplate", policy_template_json: Optional[str] = None) -> bool:
+        err_suffix = ''
+        if policy_template_json is not None:
+            err_suffix = f': {policy_template_json}'
         # check mandatory fields presence
         for mandatory_field in PolicyTemplateMandatory.__required_keys__:
             if mandatory_field not in pt:
-                raise TypeError(f'PolicyTemplate must contain a {mandatory_field} field: {policy_template_json}')
+                raise TypeError(f'PolicyTemplate must contain a {mandatory_field} field{err_suffix}')
         # convert enums
         if 'state' in pt:
             pt['state'] = PolicyTemplateState[pt['state']]
@@ -1071,6 +1089,7 @@ class MetricsReportingConfiguration(MetricsReportingConfigurationMandatory, tota
     MetricsReportingConfiguration data model in TS 26.512
     '''
     metricsReportingConfigurationId: ResourceId
+    sliceScope: List[Snssai]
     scheme: str
     dataNetworkName: str
     reportingInterval: int
@@ -1081,15 +1100,21 @@ class MetricsReportingConfiguration(MetricsReportingConfigurationMandatory, tota
     @staticmethod
     def fromJSON(mrc_json: str) -> "MetricsReportingConfiguration":
         mrc = json.loads(mrc_json)
-        MetricsReportingConfiguration.validate(mrc)
+        MetricsReportingConfiguration.validate(mrc, mrc_json)
         return MetricsReportingConfiguration(mrc)
     
     @staticmethod
-    def validate(mrc: "MetricsReportingConfiguration") -> bool:
-
+    def validate(mrc: "MetricsReportingConfiguration", json: Optional[str] = None) -> bool:
+        # err_suffix = ''
+        # if json is not None:
+        #     err_suffix = f': {json}'
         if 'metricsReportingConfigurationId' in mrc:
             if not isinstance(mrc['metricsReportingConfigurationId'], str):
                 raise ValueError('MetricsReportingConfiguration.metricsReportingConfigurationId must be a string')
+
+        if 'sliceScope' in mrc:
+            if not isinstance(mrc['sliceScope'], list) or not all(Snssai.validate(v, json) for v in mrc['sliceScope']):
+                raise ValueError('MetricsReportingConfiguration.sliceScope must be an array of Snssai objects')
 
         if 'scheme' in mrc:
             if not isinstance(mrc['scheme'], str):
@@ -1111,9 +1136,10 @@ class MetricsReportingConfiguration(MetricsReportingConfigurationMandatory, tota
             if not all(isinstance(url, str) for url in mrc['urlFilters']):
                 raise ValueError('MetricsReportingConfiguration.urlFilters must be a list of strings')
 
-        if 'samplingPeriod' in mrc:
-            if not isinstance(mrc['samplingPeriod'], int) or mrc['samplingPeriod'] <= 0:
-                raise ValueError('MetricsReportingConfiguration.samplingPeriod must be a positive integer')
+        if 'samplingPeriod' not in mrc:
+            raise ValueError('MetricsReportingConfiguration.samplingPeriod must be present')
+        if not isinstance(mrc['samplingPeriod'], int) or mrc['samplingPeriod'] <= 0:
+            raise ValueError('MetricsReportingConfiguration.samplingPeriod must be a positive integer')
 
         if 'metrics' in mrc:
             if not all(isinstance(metric, str) for metric in mrc['metrics']):
@@ -1126,8 +1152,11 @@ class MetricsReportingConfiguration(MetricsReportingConfigurationMandatory, tota
         prefix: str = ' ' * indent
         ret: str = f'''{prefix}Metrics Reporting Configuration:
 {prefix}  Metrics Reporting Configuration Id: {mrc['metricsReportingConfigurationId']}
-{prefix}  Scheme: {mrc['scheme']}
-{prefix}  Data Network Name: {mrc['dataNetworkName']}'''
+{prefix}  Scheme: {mrc.get('scheme', 'default (urn:3GPP:ns:PSS:DASH:QM10)')}'''
+        if 'sliceScope' in mrc:
+            ret += f"\n{prefix}  Slice scopes:\n{f'\n{prefix}    ---\n'.join([Snssai.format(s,indent+4) for s in mrc['sliceScope']])}"
+        if 'dataNetworkName' in mrc:
+            ret += f"\n{prefix}  Data Network Name: {mrc['dataNetworkName']}"
         if 'reportingInterval' in mrc:
             ret += f"\n{prefix}  Reporting Interval: {mrc['reportingInterval']}s"
         if 'samplePercentage' in mrc:
