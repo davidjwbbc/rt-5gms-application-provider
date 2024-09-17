@@ -84,14 +84,7 @@ MediaConfiguration model.
                 await model.addMediaSession(session)
                 chc = await self.__session.provisioningSessionContentHostingConfiguration(psid)
                 if chc is not None:
-                    dcs = []
-                    for dc in chc['distributionConfigurations']:
-                        media_distrib = await MediaDistribution(domain_name_alias=dc.get('domainNameAlias', None), certificate_id=dc.get('certificateId', None))
-                        if 'entryPoint' in dc:
-                            media_distrib.entry_point = await MediaEntryPoint(relative_path=dc['entryPoint'].get('relativePath', None),
-                                                                              content_type=dc['entryPoint'].get('contentType', None),
-                                                                              profiles=dc['entryPoint'].get('profiles', None))
-                        dcs += [media_distrib]
+                    dcs = [await MediaDistribution.from3GPPObject(dc) for dc in chc['distributionConfigurations']]
                     entry = await MediaEntry(chc['name'], chc['ingestConfiguration']['baseURL'], dcs)
                     # TODO: Add AppDistributions from DataStore map
                     entry.id = self.__psid_to_id_map.get(psid, psid)

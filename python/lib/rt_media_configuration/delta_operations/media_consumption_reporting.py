@@ -71,7 +71,7 @@ class MediaConsumptionReportingDeltaOperation(DeltaOperation):
         '''Apply this delta to the session via M1Session
         '''
         if self.__is_add:
-            crc = self.__consumptionReportingConfiguration3GPPObject(self.__mcrc)
+            crc = await self.__mcrc.to3GPPObject(self.session)
             if not await m1_session.setOrUpdateConsumptionReporting(self.session.identity(), crc):
                 return False
             if update_container:
@@ -82,16 +82,3 @@ class MediaConsumptionReportingDeltaOperation(DeltaOperation):
             if update_container:
                 self.session.unsetConsumptionReportingConfiguration()
         return True
-
-    @staticmethod
-    def __consumptionReportingConfiguration3GPPObject(mcrc: MediaConsumptionReportingConfiguration) -> ConsumptionReportingConfiguration:
-        crc = {}
-        if mcrc.reporting_interval is not None:
-            crc['reportingInterval'] = mcrc.reporting_interval
-        if mcrc.sample_percentage is not None:
-            crc['samplePercentage'] = mcrc.sample_percentage
-        if mcrc.location_reporting is not None:
-            crc['locationReporting'] = mcrc.location_reporting
-        if mcrc.access_reporting is not None:
-            crc['accessReporting'] = mcrc.access_reporting
-        return crc

@@ -29,7 +29,9 @@ models the configuration parameters for consumption reporting.
 '''
 
 import json
-from typing import Optional
+from typing import Optional, Final, List, Type, Any, TypedDict
+
+from rt_m1_client.types import ConsumptionReportingConfiguration
 
 class MediaConsumptionReportingConfiguration:
     '''MediaConsumptionReportingConfiguration class
@@ -178,3 +180,45 @@ This class models the consumption reporting configuration parameters.
             if not isinstance(value,bool):
                 value = bool(value)
         self.__access_reporting = value
+
+    __conv_3gpp: Final[List[TypedDict('3GPPConversion', {'param': str, 'field': str, 'cls': Type, 'mandatory': bool})]] = [
+        {'param': 'reporting_interval', 'field': 'reportingInterval', 'cls': int, 'mandatory': False},
+        {'param': 'sample_percentage', 'field': 'samplePercentage', 'cls': float, 'mandatory': False},
+        {'param': 'location_reporting', 'field': 'locationReporting', 'cls': bool, 'mandatory': False},
+        {'param': 'access_reporting', 'field': 'accessReporting', 'cls': bool, 'mandatory': False},
+    ]
+
+    @classmethod
+    async def from3GPPObject(cls, crc: ConsumptionReportingConfiguration) -> "MediaConsumptionReportingConfiguration":
+        args = []
+        kwargs = {}
+        for cnv in cls.__conv_3gpp:
+            if cnv['mandatory']:
+                args += [await cls.doConversion(crc[cnv['field']],cnv['cls'],'from3GPPObject')]
+            elif cnv['field'] in crc:
+                kwargs[cnv['param']] = await cls.doConversion(crc[cnv['field']],cnv['cls'],'from3GPPObject')
+        return await cls(*args, **kwargs)
+
+    async def to3GPPObject(self, session: "MediaSession") -> ConsumptionReportingConfiguration:
+        from .media_session import MediaSession
+        ret = {}
+        for cnv in self.__conv_3gpp:
+            v = getattr(self, cnv['param'], None)
+            if v is not None:
+                ret[cnv['field']] = await self.doConversion(v, cnv['cls'], 'to3GPPObject', session)
+        return ConsumptionReportingConfiguration(ret)
+
+    @classmethod
+    async def doConversion(cls, value: Any, typ: Type, convfn, session: Optional["MediaSession"] = None) -> Any:
+        from .media_session import MediaSession
+        if value is None:
+            return None
+        if getattr(typ, '__origin__', None) is list:
+            return [await cls.doConversion(v, typ.__args__[0], convfn, session=session) for v in value]
+        fn = getattr(typ, convfn, None)
+        if fn is not None:
+            if session is not None:
+                return await fn(value, session=session)
+            else:
+                return await fn(value)
+        return typ(value)

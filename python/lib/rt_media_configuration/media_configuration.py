@@ -34,12 +34,15 @@ rt_m1_client.M1Session object to synchronise that configuration with the
 import configparser
 import json
 import logging
-from typing import Optional, Iterable, Dict, List
+import os
+import os.path
+import re
+from typing import Optional, Iterable, Dict, List, Final, ClassVar, Type
 import uuid
 
 import aiofiles
 
-from rt_m1_client.configuration import Configuration
+from rt_m1_client.configuration import Configuration, app_configuration
 from rt_m1_client.session import M1Session
 from rt_m1_client.data_store import DataStore
 
@@ -48,8 +51,7 @@ from .delta_operations import *
 
 DEFAULT_CONFIG = '''[media-configuration]
 m5_authority = example.com:7777
-docroot = /var/cache/rt-5gms/as/docroots
-default_docroot = /usr/share/nginx/html
+m8outputs = FiveGMagJsonFormatter(root_dir=/usr/share/nginx/html/m8)
 '''
 
 class MediaConfiguration:
@@ -60,17 +62,24 @@ logic to use the rt_m1_client.M1Session object to synchronise that
 configuration with the 5GMS AF.
 '''
 
+    __output_factories: ClassVar[Dict[str,Type["M8Output"]]] = {}
+
     def __init__(self, configfile: Optional[str] = None, asp_id: Optional[str] = None,
                  persistent_data_store: Optional[DataStore] = None):
-        self.__outputs = []
         self.__model = {"sessions": {}, "aspId": None}
         self.asp_id = asp_id
+        if configfile is None:
+            if os.getuid() != 0:
+                configfile = os.path.expanduser(os.path.join('~', '.rt-5gms', 'media.conf'))
+            else:
+                configfile = os.path.join(os.path.sep, 'etc', 'rt-5gms', 'media.conf')
         self.__extraConfigFile = configfile
-        self.__config = Configuration()
+        self.__config = app_configuration
         self.__config.addSection('media-configuration', DEFAULT_CONFIG, self.__extraConfigFile)
         self.__data_store = persistent_data_store
         self.__log = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__m1_session = None
+        self.__output_formatters = []
 
     def __await__(self):
         '''``await`` provider for asynchronous instantiation.
@@ -147,7 +156,7 @@ configuration with the 5GMS AF.
             del self.__model["sessions"][session_id]
             return True
         else:
-            for k,v in self.__model["sessions"]:
+            for k,v in self.__model["sessions"].items():
                 if v == entry:
                     del self.__model["sessions"][k]
                     return True
@@ -176,8 +185,11 @@ configuration with the 5GMS AF.
         af_imp = await M1SessionImporter(authority=m1_authority, persistent_data_store=self.__data_store, certificate_signer=cert_signer)
         await af_imp.import_to(af_mc)
         deltas = await af_mc.deltas(self)
-        print(repr(deltas))
-        raise Exception("not implemented yet")
+        self.__log.info('Synchronising model to 5GMS AF')
+        for d in deltas:
+            self.__log.debug(str(d))
+            await d.apply_delta(self.__m1_session)
+        await self.updateM8Files()
 
     async def deltas(self, other: "MediaConfiguration") -> List[DeltaOperation]:
         '''Get the list of operations needed to change this configuration into the configuration in other
@@ -268,15 +280,80 @@ configuration with the 5GMS AF.
                 elif o_session.reporting_configurations is not None and o_session.reporting_configurations.metrics is not None:                         ret += [await MediaMetricsReportingDeltaOperation(session, add=metric) for metric in o_session.reporting_configurations.metrics]
         return ret
 
+    async def updateM8Files(self):
+        '''Write out the M8 static files for registered M8Output objects
+        '''
+        self.__log.info('Updating M8 static files')
+        for fmt in self.__output_formatters:
+            await fmt.writeOutput(self)
+
     async def __asyncInit(self):
         '''Asynchronous object instantiation
 
-        Loads previous state from the DataStore.
+        Loads previous state from the DataStore and initialise M8Outputs from config.
 
         :meta private:
         :return: self
         '''
+        m8_outputs: List[str] = self.__config.get('m8outputs', section='media-configuration', default='').split(',')
+        for outstr in m8_outputs:
+            m8_out = await self.__make_m8_output(outstr)
+            await m8_out.addToMediaConfiguration(self)
         return self
+
+    __fnstr_re: Final[re.Pattern] = re.compile(r'^(?P<name>\w+)(?:\((?:(?P<args>[^=,]+(?:,[^=,]+)*)(?:(?=,),))?(?P<kwargs>\w+=[^=,]+(?:,\w+=[^=,]+)*)?\))?$')
+
+    @staticmethod
+    async def __parse_value(val: str):
+        try:
+            val = int(val)
+        except ValueError:
+            try:
+                val = float(val)
+            except ValueError:
+                pass
+        return val
+
+    async def __make_m8_output(self, outstr: str) -> "M8Output":
+        from rt_m8_output import M8Output
+        match = self.__fnstr_re.match(outstr)
+        if match is None:
+            raise ValueError(f'Badly formatted M8Output name: {outstr}')
+        (name,args,kwargs) = match.group('name', 'args', 'kwargs')
+        if name not in self.__output_factories:
+            raise ValueError(f'M8Output "{name}" not known')
+        if args is None:
+            args = []
+        else:
+            args = [await self.__parse_value(a.strip()) for a in args.split(',')]
+        if kwargs is None:
+            kwargs = {}
+        else:
+            kwargs = {k.strip():await self.__parse_value(v.strip()) for k,v in [a.split('=') for a in kwargs.split(',')]}
+        return await self.__output_factories[name](*args, **kwargs)
+
+    async def attachM8Output(self, m8_output: "M8Output") -> bool:
+        '''Attach an M8 Output Formatter to this media session
+
+        The M8Output will be invoked when changes are synchronised to the 5GMS AF.
+
+        :return: True if the MediaConfiguration now has the m8_output attached.
+        '''
+        from rt_m8_output import M8Output
+        if m8_output not in self.__output_formatters:
+            self.__output_formatters += [m8_output]
+        return True
+
+    async def detachM8Output(self, m8_output: "M8Output") -> bool:
+        '''Detach an M8 Output Formatter from this media session
+
+        :return: True if the M8Output has been detached, False if the M8Output was not attached
+        '''
+        from rt_m8_output import M8Output
+        if m8_output not in self.__output_formatters:
+            return False
+        self.__output_formatters.remove(m8_output)
+        return True
 
     @staticmethod
     def jsonObjectHandler(obj):
@@ -295,5 +372,10 @@ configuration with the 5GMS AF.
             if not isinstance(value, str) or len(value) == 0:
                 raise TypeError('MediaConfiguration.aspId must be a non-empty str or None')
         self.__model["aspId"] = value
+
+    @classmethod
+    def registerM8OutputClass(cls, output_cls: Type["M8Output"]):
+        from rt_m8_output import M8Output
+        cls.__output_factories[output_cls.__name__] = output_cls
 
 # vim:ts=8:sts=4:sw=4:expandtab:

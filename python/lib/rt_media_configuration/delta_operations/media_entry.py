@@ -71,36 +71,28 @@ class MediaEntryDeltaOperation(DeltaOperation):
 
     async def apply_delta(self, m1_session: M1Session, update_container: bool = True) -> bool:
         if self.__is_remove:
+            # Remove media entry from 5GMS AF via M1
             if not await m1_session.contentHostingConfigurationRemove(self.session.provisioning_session_id):
                 return False
+            # Update the session by removing the media entry
             if update_container:
                 self.session.media_entry = None
         elif self.__is_add:
-            chc = {'name': self.__media_entry.name, 'ingestConfiguration': {'pull': self.__media_entry.is_pull, 'baseURL': self.__media_entry.ingest_url_prefix}, 'distributionConfigurations': [self.__distribution3GPPObject(dc, self.session) for dc in self.__media_entry.distributions]}
+            # Add media entry to 5GMS AF via M1
+            chc: Optional[ContentHostingConfiguration] = {'name': self.__media_entry.name,
+                                                          'ingestConfiguration': {'pull': self.__media_entry.is_pull,
+                                                                                  'baseURL': self.__media_entry.ingest_url_prefix},
+                                                          'distributionConfigurations': [
+                                                    await dc.to3GPPObject(self.session) for dc in self.__media_entry.distributions]}
             if not await m1_session.contentHostingConfigurationCreate(self.session.provisioning_session_id, chc):
                 return False
+            # Load changes added by 5GMS AF to delta object (in case these are used later - may update object in another session)
+            chc = await m1_session.contentHostingConfigurationGet(self.session.provisioning_session_id)
+            if chc is not None:
+                if not self.__media_entry.is_pull:
+                    self.__media_entry.ingest_url_prefix = chc['ingestConfiguration']['baseURL']
+                self.__media_entry.distributions = [await MediaDistribution.from3GPPObject(dc) for dc in chc['distributionConfigurations']]
+            # Update the session we are adding/modifying this media entry for
             if update_container:
                 self.session.media_entry = self.__media_entry
         return True
-
-    @staticmethod
-    def __distribution3GPPObject(distrib: MediaDistribution, session: MediaSession) -> DistributionConfiguration:
-        ret = {}
-        if distrib.domain_name_alias is not None:
-            ret['domainNameAlias'] = distrib.domain_name_alias
-        if distrib.entry_point is not None:
-            ret['entryPoint'] = MediaEntryDeltaOperation.__entryPoint3GPPObject(distrib.entry_point)
-        if distrib.certificate_id is not None:
-            cert = session.certificateByIdent(distrib.certificate_id)
-            if cert is not None:
-                ret['certificateId'] = cert.identity()
-            else:
-                ret['certificateId'] = distrib.certificate_id
-        return ret
-
-    @staticmethod
-    def __entryPoint3GPPObject(entry_point: MediaEntryPoint) -> M1MediaEntryPoint:
-        ret = {'relativePath': entry_point.relative_path, 'contentType': entry_point.content_type}
-        if entry_point.profiles is not None:
-            ret['profiles'] = entry_point.profiles
-        return ret

@@ -29,7 +29,9 @@ entry point for a MediaDistribution.
 '''
 
 import json
-from typing import Optional, List, Iterable
+from typing import Optional, List, Iterable, Final, Type, TypedDict, Any
+
+from rt_m1_client.types import M1MediaEntryPoint
 
 class MediaEntryPoint:
     '''MediaEntryPoint class
@@ -207,3 +209,41 @@ a mime content type with an optional array of profile strings.
         if len(self.__profiles) == 0:
             self.__profiles = None
         return True
+
+    __conv_3gpp: Final[List[TypedDict('3GPPConversion', {'param': str, 'field': str, 'cls': Type})]] = [
+        {'param': 'relative_path', 'field': 'relativePath', 'cls': str},
+        {'param': 'content_type', 'field': 'contentType', 'cls': str},
+        {'param': 'profiles', 'field': 'profiles', 'cls': List[str]}
+    ]
+
+    @classmethod
+    async def from3GPPObject(cls, ep: M1MediaEntryPoint) -> "MediaEntryPoint":
+        kwargs = {}
+        for cnv in cls.__conv_3gpp:
+            if cnv['field'] in ep:
+                kwargs[cnv['param']] = await cls.doConversion(ep[cnv['field']],cnv['cls'],'from3GPPObject')
+        return await cls(**kwargs)
+
+    async def to3GPPObject(self, session: "MediaSession") -> M1MediaEntryPoint:
+        from .media_session import MediaSession
+        ret = {}
+        for cnv in self.__conv_3gpp:
+            v = getattr(self, cnv['param'], None)
+            if v is not None:
+                ret[cnv['field']] = await self.doConversion(v, cnv['cls'], 'to3GPPObject', session)
+        return M1MediaEntryPoint(ret)
+
+    @classmethod
+    async def doConversion(cls, value: Any, typ: Type, convfn, session: Optional["MediaSession"] = None) -> Any:
+        from .media_session import MediaSession
+        if value is None:
+            return None
+        if getattr(typ, '__origin__', None) is list:
+            return [await cls.doConversion(v, typ.__args__[0], convfn, session=session) for v in value]
+        fn = getattr(typ, convfn, None)
+        if fn is not None:
+            if session is not None:
+                return await fn(value, session=session)
+            else:
+                return await fn(value)
+        return typ(value)
