@@ -29,7 +29,7 @@ These types can be used in static type checking in Python 3.
 import enum
 import json
 import string
-from typing import List, Literal, TypedDict, Union, Optional
+from typing import List, Literal, TypedDict, Union, Optional, Tuple
 
 def wrapped_default(self, obj):
     return getattr(obj.__class__, "__jsontype__", wrapped_default.default)(obj)
@@ -139,7 +139,7 @@ class ContentProtocols(TypedDict, total=False):
 class DistributionNetworkType(enum.Enum):
     '''Enumeration DistributionNetworkType in TS 26.512
     '''
-    NETWORK_EMBMS = enum.auto() #: Distribution type is via EMBMS network.
+    DISTRIBUTION_NETWORK_EMBMS = enum.auto() #: Distribution type is via EMBMS network.
 
     def __jsontype__(self, **options):
         return str(self)
@@ -179,6 +179,27 @@ class M1MediaEntryPoint(M1MediaEntryPointMandatory, total=False):
     '''
     profiles: List[str]
 
+class URLSignatureMandatory(TypedDict):
+    '''DistributionConfiguration.urlSignature structure mandatory elements in TS 26.512
+    '''
+    urlPattern: str
+    tokenName: str
+    passphraseName: str
+    passphrase: str
+    tokenExpiryName: str
+    useIPAddress: bool
+
+class URLSignature(URLSignatureMandatory, total=False):
+    '''DistributionConfiguration.urlSignature structure in TS 26.512
+    '''
+    ipAddressName: str
+
+class GeoFencing(TypedDict):
+    '''DistributionConfiguration.geoFencing structure in TS 26.512
+    '''
+    locatorType: str
+    locators: List[str]
+
 class DistributionConfiguration(TypedDict, total=False):
     '''
     DistributionConfiguration structure in TS 26.512
@@ -190,20 +211,10 @@ class DistributionConfiguration(TypedDict, total=False):
     entryPoint: M1MediaEntryPoint
     pathRewriteRules: List[PathRewriteRule]
     cachingConfigurations: List[CachingConfiguration]
-    geoFencing: TypedDict('GeoFencing', {'locatorType': str, 'locators': List[str]})
-    urlSignature: TypedDict('URLSignature', {
-        'urlPattern': str,
-        'tokenName': str,
-        'passphraseName': str,
-        'passphrase': str,
-        'tokenExpiryName': str,
-        'useIPAddress': bool
-        })
+    geoFencing: GeoFencing
+    urlSignature: URLSignature
     certificateId: ResourceId
-    supplementaryDistributionNetworks: List[TypedDict('SupplementaryDistributionNetwork', {
-        'distributionNetworkType': DistributionNetworkType,
-        'distributionMode': DistributionMode,
-        })]
+    supplementaryDistributionNetworks: List[Tuple[DistributionNetworkType,DistributionMode]]
 
     @staticmethod
     def format(dc: "DistributionConfiguration", indent: int = 0) -> str:
@@ -275,6 +286,11 @@ class DistributionConfiguration(TypedDict, total=False):
             if 'ipAddressName' in us:
                 s += f'''
 {prefix}    IP Address name: {us['ipAddressName']}'''
+        if 'supplementaryDistributionNetworks' in dc:
+            s += f'''
+{prefix}  Supplementary Distribution Networks:
+{prefix}    '''
+            s += ', '.join([f'{sdn[0]} => {sdn[1]}' for sdn in dc['supplementaryDistributionNetworks']])
         return s
 
 class IngestConfiguration(TypedDict, total=False):
@@ -317,10 +333,8 @@ class ContentHostingConfiguration(ContentHostingConfigurationMandatory, total=Fa
             for dist_conf in chc['distributionConfigurations']:
                 if 'supplementaryDistributionNetworks' in dist_conf:
                     for supp_net in dist_conf['supplementaryDistributionNetworks']:
-                        supp_net['distributionNetworkType'] = DistributionNetworkType[
-                                supp_net['distributionNetworkType']]
-                        supp_net['distributionMode'] = DistributionMode[
-                                supp_net['distributionMode']]
+                        supp_net[0] = DistributionNetworkType[supp_net[0]]
+                        supp_net[1] = DistributionMode[supp_net[1]]
         # Validate against ContentHostingConfiguration type
         return ContentHostingConfiguration(chc)
 
