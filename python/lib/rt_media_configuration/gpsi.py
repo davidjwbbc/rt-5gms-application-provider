@@ -29,6 +29,7 @@ strings.
 '''
 
 import json
+import string
 
 class Gpsi:
     '''Gpsi class
@@ -120,3 +121,11 @@ This class provides validation of GPSI strings.
             (extid_first, extid_sep, extid_second) = extid.partition('@')
             if extid_sep != '@' or '@' in extid_first or '@' in extid_second or len(extid_first) == 0 or len(extid_second) == 0:
                 raise ValueError('extid GPSI must be "extid-" followed by a string containing two parts separated by a single @ symbol')
+
+    @classmethod
+    async def from3GPPObject(cls, value: str) -> "Gpsi":
+        return cls(value)
+
+    async def to3GPPObject(self, session: "MediaSession") -> str:
+        from .media_session import MediaSession
+        return self.__gpsi

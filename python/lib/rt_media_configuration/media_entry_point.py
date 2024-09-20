@@ -57,13 +57,17 @@ a mime content type with an optional array of profile strings.
         return self
 
     def __eq__(self, other: "MediaEntryPoint") -> bool:
-        if self.__relative_path != other.__relative_path:
+        if self.__relative_path != other.relative_path:
             return False
-        if self.__content_type != other.__content_type:
+        if self.__content_type != other.content_type:
             return False
-        return ((self.__profiles is None and other.__profiles is None) or
-                (self.__profiles is not None and other.__profiles is not None and sorted(self.__profiles) != sorted(other.__profiles))
-               )
+        if self.__profiles is None:
+            if other.profiles is not None:
+                return False
+            return True
+        elif other.profiles is None:
+            return False
+        return sorted(self.__profiles) == sorted(other.profiles)
 
     def __ne__(self, other: "MediaEntryPoint") -> bool:
         return not (self == other)

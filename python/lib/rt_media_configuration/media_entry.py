@@ -89,6 +89,33 @@ information will only be published via M8.
             return (sorted(self.__app_distributions) == sorted(other.__app_distributions))
         return True
 
+    async def shalloweq(self, other: "MediaEntry") -> bool:
+        if (self.__name != other.__name):
+            return False
+        if (self.__ingest_url_prefix != other.__ingest_url_prefix):
+            return False
+        if (self.__is_pull != other.__is_pull):
+            return False
+        if (len(self.__distributions) != len(other.__distributions)):
+            return False
+        to_check = other.__distributions.copy()
+        for dist in self.__distributions:
+            for o_dist in to_check:
+                if await dist.shalloweq(o_dist):
+                    to_check.remove(o_dist)
+                    break
+            else:
+                return False
+        if self.__app_distributions is None and other.__app_distributions is not None:
+            return False
+        if self.__app_distributions is not None:
+            if other.__app_distributions is None:
+                return False
+            if (len(self.__app_distributions) != len(other.__app_distributions)):
+                return False
+            return (sorted(self.__app_distributions) == sorted(other.__app_distributions))
+        return True
+
     def __ne__(self, other: "MediaEntry") -> bool:
         return not (self == other)
 

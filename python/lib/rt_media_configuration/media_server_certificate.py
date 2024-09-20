@@ -45,7 +45,7 @@ This class models AS certificates which are part of a MediaSession.
         self.public_cert = public_cert
 
     def __await__(self):
-        return self._asyncInit().__await__
+        return self._asyncInit().__await__()
 
     async def _asyncInit(self):
         return self

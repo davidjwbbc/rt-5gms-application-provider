@@ -57,8 +57,8 @@ class MediaEntryDeltaOperation(DeltaOperation):
 
     def __str__(self):
         if self.__is_add:
-            return f'Add ContentHostingConfiguration to ProvisioningSession "{self.session.identity()}"'
-        return f'Remove ContentHostingConfiguration from ProvisioningSession "{self.session.identity()}"'
+            return f'Add ContentHostingConfiguration "{self.__media_entry.name}" to ProvisioningSession "{self.session.identity()}"'
+        return f'Remove ContentHostingConfiguration "{self.__media_entry.name}" from ProvisioningSession "{self.session.identity()}"'
 
     def __repr__(self):
         ret = super().__repr__()[:-1]
@@ -91,7 +91,8 @@ class MediaEntryDeltaOperation(DeltaOperation):
             if chc is not None:
                 if not self.__media_entry.is_pull:
                     self.__media_entry.ingest_url_prefix = chc['ingestConfiguration']['baseURL']
-                self.__media_entry.distributions = [await MediaDistribution.from3GPPObject(dc) for dc in chc['distributionConfigurations']]
+                distribs = [await MediaDistribution.from3GPPObject(dc) for dc in chc['distributionConfigurations']]
+                self.__media_entry.distributions = distribs
             # Update the session we are adding/modifying this media entry for
             if update_container:
                 self.session.media_entry = self.__media_entry

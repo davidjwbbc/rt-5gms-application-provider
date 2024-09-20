@@ -30,9 +30,12 @@ This module provides the MediaSession class which models a 3GPP TS 26.512
 ProvisioningSession.
 '''
 
+import datetime
 import json
-from typing import Optional, List, Dict, Iterable, Union
+from typing import Optional, List, Dict, Iterable, Union, Tuple
 import uuid
+
+import OpenSSL.crypto
 
 from .media_entry import MediaEntry
 from .media_app_distribution import MediaAppDistribution
@@ -97,7 +100,7 @@ This class models a 3GPP TS 26.512 ProvisioningSession. The ProvisioningSession 
             return False
         return self.__dynamic_policies == other.__dynamic_policies
 
-    def shallow_eq(self, other: "MediaSession") -> bool:
+    async def shallow_eq(self, other: "MediaSession") -> bool:
         if self.__is_downlink != other.__is_downlink:
             return False
         if self.__external_app_id != other.__external_app_id:
@@ -495,3 +498,21 @@ This class models a 3GPP TS 26.512 ProvisioningSession. The ProvisioningSession 
 
     def unsetDynamicPolicies(self):
         self.__dynamic_policies = None
+
+    async def gatherCertificateDetails(self, cert_id: str) -> Tuple[Optional[List[str]],Optional[datetime.datetime]]:
+        cert = self.certificateByIdent(cert_id)
+        if cert is None:
+            return (None,None)
+        return (cert.domain_names, await self.__extract_end_datetime_from_pem(cert.public_cert))
+
+    async def __extract_end_datetime_from_pem(self, cert: Optional[str]) -> Optional[datetime.datetime]:
+        if cert is None:
+            return None
+        try:
+            x509 = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, cert)
+        except OpenSSL.crypto.Error:
+            return None
+        end_str = x509.get_notAfter()
+        if isinstance(end_str, bytes):
+            end_str = end_str.decode('utf-8')
+        return datetime.datetime.strptime(end_str, '%Y%m%d%H%M%SZ').replace(tzinfo=datetime.timezone.utc)

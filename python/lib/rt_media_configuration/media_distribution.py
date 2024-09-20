@@ -114,6 +114,34 @@ This class models the distribution configurations for a MediaEntry.
                 return False
         return True
 
+    async def shalloweq(self, other: Optional["MediaDistribution"]) -> bool:
+        if other is None:
+            return False
+        only_if_set: Final[List[str]] = ['content_prep_template_id', 'canonical_domain_name', 'base_url']
+        not_values: Final[List[str]] = ['certificate_id']
+        for param in self.__cmp_params:
+            sp = getattr(self, param)
+            op = getattr(other, param)
+            if sp is not None:
+                if op is None:
+                    if param not in only_if_set:
+                        return False
+                elif isinstance(sp, list): 
+                    lsp = len(sp)
+                    lop = len(op)
+                    if lsp != lop:
+                        return False
+                    if param not in not_values:
+                        ssp = sorted(sp)
+                        sop = sorted(op)
+                        if ssp != sop:
+                            return False
+                elif param not in not_values and sp != op:
+                    return False
+            elif op is not None and param not in only_if_set:
+                return False
+        return True
+
     def __ne__(self, other: "MediaDistribution") -> bool:
         return not self == other
 

@@ -23,7 +23,9 @@ This module provides the M1SessionImporter class to import the current state
 of the AF (via M1Session class and DataStore) into a MediaConfiguration.
 '''
 
-from typing import Optional, Union, Tuple
+from typing import Optional, Union, Tuple, List
+
+import OpenSSL.crypto
 
 from rt_m1_client import M1Session, DataStore, CertificateSigner, PROVISIONING_SESSION_TYPE_DOWNLINK, ProvisioningSession
 
@@ -31,6 +33,11 @@ from ..media_session import MediaSession
 from ..media_entry import MediaEntry
 from ..media_distribution import MediaDistribution
 from ..media_entry_point import MediaEntryPoint
+from ..media_server_certificate import MediaServerCertificate
+from ..media_reporting_configuration import MediaReportingConfiguration
+from ..media_consumption_reporting_configuration import MediaConsumptionReportingConfiguration
+from ..media_metrics_reporting_configuration import MediaMetricsReportingConfiguration
+from ..media_dynamic_policy import MediaDynamicPolicy
 
 from .importer import MediaConfigurationImporter
 
@@ -82,6 +89,13 @@ MediaConfiguration model.
             if ps is not None:
                 session = await MediaSession(ps['provisioningSessionType']==PROVISIONING_SESSION_TYPE_DOWNLINK, ps['appId'], provisioning_session_id=psid, asp_id=ps.get('aspId',None))
                 await model.addMediaSession(session)
+                if 'serverCertificateIds' in ps:
+                    for cert_id in ps['serverCertificateIds']:
+                        public_cert = await self.__session.certificateGet(psid, cert_id)
+                        domain_names = []
+                        if public_cert is not None:
+                            domain_names = await self.__extract_domains_from_public_cert_pem(public_cert)
+                        session.addCertificate(await MediaServerCertificate(certificate_id=cert_id, domain_names=domain_names, public_cert=public_cert))
                 chc = await self.__session.provisioningSessionContentHostingConfiguration(psid)
                 if chc is not None:
                     dcs = [await MediaDistribution.from3GPPObject(dc) for dc in chc['distributionConfigurations']]
@@ -90,7 +104,45 @@ MediaConfiguration model.
                     entry.id = self.__psid_to_id_map.get(psid, psid)
                     entry.provisioning_session_id = psid
                     session.media_entry = entry
+                reporting = None
+                crc = await self.__session.consumptionReportingConfigurationGet(psid)
+                if crc is not None:
+                    consumption_reporting = await MediaConsumptionReportingConfiguration.from3GPPObject(crc)
+                    reporting = await MediaReportingConfiguration(consumption_reporting=consumption_reporting)
+                if 'metricsReportingConfigurationIds' in ps:
+                    for mrc_id in ps['metricsReportingConfigurationIds']:
+                        mrc = await self.__session.metricsReportingConfigurationGet(psid, mrc_id)
+                        if mrc is not None:
+                            metrics_reporting = await MediaMetricsReportingConfiguration.from3GPPObject(mrc)
+                            if reporting is None:
+                                reporting = await MediaReportingConfiguration(metrics_reporting=[metrics_reporting])
+                            else:
+                                reporting.addMetricsReporting(metrics_reporting)
+                if reporting is not None:
+                    session.reporting_configurations = reporting
+                if 'policyTemplateIds' in ps:
+                    for policy_id in ps['policyTemplateIds']:
+                        pt = await self.__session.policyTemplateGet(psid, policy_id)
+                        dynamic_policy = await MediaDynamicPolicy.from3GPPObject(pt)
+                        session.addDynamicPolicy(dynamic_policy)
+                # TODO: contentPreparationTemplateIds, edgeResourcesConfigurationIds & eventDataProcessingConfigurationIds
+        
         return True
 
     async def __loadFromDataStore(self):
         self.__psid_to_id_map = await self.__data_store.get('media-configuration-psid-map', {})
+
+    async def __extract_domains_from_public_cert_pem(self, public_cert: str) -> Optional[List[str]]:
+        ret = set()
+        x509 = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, public_cert)
+        subject = x509.get_subject()
+        ret.add(subject.commonName)
+        for ext_num in range(x509.get_extension_count()):
+            ext = x509.get_extension(ext_num)
+            ext_name = ext.get_short_name().decode('utf-8')
+            if ext_name == "subjectAltName":
+                for s in str(ext).split(','):
+                    ret.add(s.strip())
+        return list(ret)
+
+

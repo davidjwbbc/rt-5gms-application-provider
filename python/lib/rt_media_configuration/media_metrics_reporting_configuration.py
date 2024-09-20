@@ -29,7 +29,9 @@ metrics reporting configuration parameters.
 '''
 
 import json
-from typing import Optional, List, Iterable
+from typing import Optional, List, Iterable, Final, Type, Any, TypedDict
+
+from rt_m1_client.types import MetricsReportingConfiguration
 
 from .snssai import Snssai
 
@@ -66,6 +68,39 @@ This class models the configuration parameters for metrics reporting.
 
     def __eq__(self, other: "MediaMetricsReportingConfiguration") -> bool:
         if self.__metrics_reporting_configuration_id != other.__metrics_reporting_configuration_id:
+            return False
+        if self.__reporting_interval != other.__reporting_interval:
+            return False
+        if self.__sampling_period != other.__sampling_period:
+            return False
+        if self.__sample_percentage != other.__sample_percentage:
+            return False
+        if self.__scheme != other.__scheme:
+            return False
+        if self.__data_network_name != other.__data_network_name:
+            return False
+        if self.__metrics is not None and other.__metrics is None:
+            return False
+        if self.__metrics is None and other.__metrics is not None:
+            return False
+        if self.__metrics is not None and sorted(self.__metrics) != sorted(other.__metrics):
+            return False
+        if self.__url_filters is not None and other.__url_filters is None:
+            return False
+        if self.__url_filters is None and other.__url_filters is not None:
+            return False
+        if self.__url_filters is not None and sorted(self.__url_filters) != sorted(other.__url_filters):
+            return False
+        if self.__slice_scope is not None and other.__slice_scope is None:
+            return False
+        if self.__slice_scope is None and other.__slice_scope is not None:
+            return False
+        if self.__slice_scope is None:
+            return True
+        return sorted(self.__slice_scope) == sorted(other.__slice_scope)
+
+    async def shalloweq(self, other: "MediaMetricsReportingConfiguration") -> bool:
+        if self.__metrics_reporting_configuration_id is not None and other.__metrics_reporting_configuration_id is not None and self.__metrics_reporting_configuration_id != other.__metrics_reporting_configuration_id:
             return False
         if self.__reporting_interval != other.__reporting_interval:
             return False
@@ -328,3 +363,51 @@ This class models the configuration parameters for metrics reporting.
             if len(value) == 0:
                 value = None
         self.__metrics = value
+
+    __conv_3gpp: Final[List[TypedDict('3GPPConversion', {'param': str, 'field': str, 'cls': Type, 'mandatory': bool})]] = [
+        {'param': 'sampling_period', 'field': 'samplingPeriod', 'cls': int, 'mandatory': True},
+        {'param': 'metrics_reporting_configuration_id', 'field': 'metricsReportingConfigurationId', 'cls': str, 'mandatory': False},
+        {'param': 'slice_scope', 'field': 'sliceScope', 'cls': List[Snssai], 'mandatory': False},
+        {'param': 'scheme', 'field': 'scheme', 'cls': str, 'mandatory': False},
+        {'param': 'data_network_name', 'field': 'dataNetworkName', 'cls': str, 'mandatory': False},
+        {'param': 'reporting_interval', 'field': 'reportingInterval', 'cls': int, 'mandatory': False},
+        {'param': 'sample_percentage', 'field': 'samplePercentage', 'cls': float, 'mandatory': False},
+        {'param': 'url_filters', 'field': 'urlFilters', 'cls': List[str], 'mandatory': False},
+        {'param': 'metrics', 'field': 'metrics', 'cls': List[str], 'mandatory': False}
+    ]
+
+    @classmethod
+    async def from3GPPObject(cls, cc: MetricsReportingConfiguration) -> "MediaMetricsReportingConfiguration":
+        args = []
+        kwargs = {}
+        for cnv in cls.__conv_3gpp:
+            if cnv['mandatory']:
+                args += [await cls.doConversion(cc[cnv['field']],cnv['cls'],'from3GPPObject')]
+            elif cnv['field'] in cc:
+                kwargs[cnv['param']] = await cls.doConversion(cc[cnv['field']],cnv['cls'],'from3GPPObject')
+        return await cls(*args, **kwargs)
+
+    async def to3GPPObject(self, session: "MediaSession") -> MetricsReportingConfiguration:
+        from .media_session import MediaSession
+        ret = {}
+        for cnv in self.__conv_3gpp:
+            v = getattr(self, cnv['param'], None)
+            if v is not None:
+                ret[cnv['field']] = await self.doConversion(v, cnv['cls'], 'to3GPPObject', session)
+        return MetricsReportingConfiguration(ret)
+
+    @classmethod
+    async def doConversion(cls, value: Any, typ: Type, convfn, session: Optional["MediaSession"] = None) -> Any:
+        from .media_session import MediaSession
+        if value is None:
+            return None
+        if getattr(typ, '__origin__', None) is list:
+            return [await cls.doConversion(v, typ.__args__[0], convfn, session=session) for v in value]
+        fn = getattr(typ, convfn, None)
+        if fn is not None:
+            if session is not None:
+                return await fn(value, session=session)
+            else:
+                return await fn(value)
+        return typ(value)
+

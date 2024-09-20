@@ -32,6 +32,7 @@ rt_m1_client.M1Session object to synchronise that configuration with the
 5GMS AF.
 '''
 import configparser
+import datetime
 import json
 import logging
 import os
@@ -189,6 +190,7 @@ configuration with the 5GMS AF.
         for d in deltas:
             self.__log.debug(str(d))
             await d.apply_delta(self.__m1_session)
+        self.__model = af_mc.__model
         await self.updateM8Files()
 
     async def deltas(self, other: "MediaConfiguration") -> List[DeltaOperation]:
@@ -201,7 +203,7 @@ configuration with the 5GMS AF.
         to_add = list(other.__model['sessions'].values())
         for session in self.__model['sessions'].values():
             for o_session in to_add:
-                if session.shallow_eq(o_session):
+                if await session.shallow_eq(o_session):
                     have += [(session, o_session)]
                     to_add.remove(o_session)
                     break
@@ -217,22 +219,38 @@ configuration with the 5GMS AF.
                 if o_session.certificates is None:
                     ret += [await MediaServerCertificateDeltaOperation(session, remove=cert_id) for cert_id in session.certificates.keys()]
                 else:
-                    certs_add = o_session.certificates.copy()
+                    # find certs that need to be added
+                    certs_add = {o_cert_id:o_cert for o_cert_id,o_cert in o_session.certificates.items() if not await self.__about_to_expire((await o_session.gatherCertificateDetails(o_cert_id))[1])}
                     certs_del = []
                     for cert_id in session.certificates.keys():
                         if cert_id in certs_add:
+                            # Already have that certificate so do not need to add it again
                             del certs_add[cert_id]
                         else:
-                            certs_del += [cert_id]
+                            (cert_hosts,cert_expiry) = await session.gatherCertificateDetails(cert_id)
+                            for o_cert_id,o_cert in certs_add.items():
+                                (o_cert_hosts, o_cert_expiry) = await o_session.gatherCertificateDetails(o_cert_id)
+                                if sorted(cert_hosts) == sorted(o_cert_hosts):
+                                    # found matching cert
+                                    if await self.__about_to_expire(cert_expiry):
+                                        # current cert is about to expire so treat as not matching
+                                        certs_del += [cert_id]
+                                    else:
+                                        # copy over certificate Id to delta object if we already have it
+                                        if session.certificates[cert_id].certificate_id is not None:
+                                            o_cert.certificate_id = session.certificates[cert_id].certificate_id
+                                        del certs_add[o_cert_id]
+                                    break
+                            else:
+                                certs_del += [cert_id]
                     ret += [await MediaServerCertificateDeltaOperation(session, add=(cid,cert)) for cid,cert in certs_add.items()]
                     ret += [await MediaServerCertificateDeltaOperation(session, remove=cid) for cid in certs_del]
-                
             if session.media_entry is None and o_session.media_entry is not None:
                 ret += [await MediaEntryDeltaOperation(session, add=o_session.media_entry)]
             elif session.media_entry is not None:
                 if o_session.media_entry is None:
                     ret += [await MediaEntryDeltaOperation(session, remove=True)]
-                elif session.media_entry != o_session.media_entry:
+                elif not await session.media_entry.shalloweq(o_session.media_entry):
                     ret += [await MediaEntryDeltaOperation(session, add=o_session.media_entry)]
 
             if session.dynamic_policies is None and o_session.dynamic_policies is not None:
@@ -271,8 +289,11 @@ configuration with the 5GMS AF.
                     else:
                         metric_to_add = []
                     for metric in session.reporting_configurations.metrics:
-                        if metric in metric_to_add:
-                            metric_to_add.remove(metric)
+                        for o_metric in metric_to_add:
+                            if await metric.shalloweq(o_metric):
+                                # Already have this metric
+                                metric_to_add.remove(o_metric)
+                                break
                         else:
                             metric_to_del += [metric]
                     ret += [await MediaMetricsReportingDeltaOperation(session, add=metric) for metric in metric_to_add]
@@ -377,5 +398,12 @@ configuration with the 5GMS AF.
     def registerM8OutputClass(cls, output_cls: Type["M8Output"]):
         from rt_m8_output import M8Output
         cls.__output_factories[output_cls.__name__] = output_cls
+
+    async def __about_to_expire(self, cert_expiry: Optional[datetime.datetime]) -> bool:
+        if cert_expiry is None:
+            return False
+        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        near_expiry = now + datetime.timedelta(days=7)
+        return cert_expiry <= near_expiry
 
 # vim:ts=8:sts=4:sw=4:expandtab:

@@ -31,8 +31,10 @@ configuration for a MediaDynamicPolicy.
 '''
 
 import json
-from typing import Optional, List, Iterable
+from typing import Optional, List, Iterable, Final, Type, Any, TypedDict
 from .gpsi import Gpsi
+
+from rt_m1_client.types import ChargingSpecification, SponsoringStatus
 
 class MediaChargingSpecification:
     '''MediaChargingSpecification class
@@ -180,3 +182,49 @@ MediaDynamicPolicy.
 
     def unsetGpsis(self):
         self.__gpsis = None
+
+    __conv_3gpp: Final[List[TypedDict('3GPPConversion', {'param': str, 'field': str, 'cls': Type, 'map': Optional[dict], 'mandatory': bool})]] = [
+        {'param': 'sponsor_id', 'field': 'sponId', 'cls': str, 'map': None, 'mandatory': False},
+        {'param': 'enabled', 'field': 'sponStatus', 'cls': bool, 'map': {True: SponsoringStatus.SPONSOR_ENABLED, False: SponsoringStatus.SPONSOR_DISABLED}, 'mandatory': False},
+        {'param': 'gpsis', 'field': 'gpsi', 'cls': List[Gpsi], 'map': None, 'mandatory': False}
+    ]
+
+    @classmethod
+    async def from3GPPObject(cls, cc: ChargingSpecification) -> "MediaChargingSpecification":
+        args = []
+        kwargs = {}
+        for cnv in cls.__conv_3gpp:
+            if cnv['mandatory']:
+                args += [await cls.doConversion(cc[cnv['field']],cnv['cls'],cnv['map'],'from3GPPObject')]
+            elif cnv['field'] in cc:
+                kwargs[cnv['param']] = await cls.doConversion(cc[cnv['field']],cnv['cls'],cnv['map'],'from3GPPObject')
+        return await cls(*args, **kwargs)
+
+    async def to3GPPObject(self, session: "MediaSession") -> ChargingSpecification:
+        from .media_session import MediaSession
+        ret = {}
+        for cnv in self.__conv_3gpp:
+            v = getattr(self, cnv['param'], None)
+            if v is not None:
+                ret[cnv['field']] = await self.doConversion(v, cnv['cls'], cnv['map'], 'to3GPPObject', session)
+        return ChargingSpecification(ret)
+
+    @classmethod
+    async def doConversion(cls, value: Any, typ: Type, valmap: Optional[dict], convfn: str, session: Optional["MediaSession"] = None) -> Any:
+        from .media_session import MediaSession
+        if value is None:
+            return None
+        if valmap is not None:
+            if isinstance(value,typ):
+                return valmap[value]
+            else:
+                return dict(map(reversed,valmap.items()))[value]
+        if getattr(typ, '__origin__', None) is list:
+            return [await cls.doConversion(v, typ.__args__[0], None, convfn, session=session) for v in value]
+        fn = getattr(typ, convfn, None)
+        if fn is not None:
+            if session is not None:
+                return await fn(value, session=session)
+            else:
+                return await fn(value)
+        return typ(value)

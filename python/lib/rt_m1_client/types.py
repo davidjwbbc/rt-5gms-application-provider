@@ -56,6 +56,13 @@ class ProvisioningSession (ProvisioningSessionMandatory, total=False):
     '''A `ProvisioningSession` object as defined in TS 26.512
     '''
     aspId: ApplicationId
+    # read-only fields
+    serverCertificateIds: List[str]
+    contentPreparationTemplateIds: List[str]
+    metricsReportingConfigurationIds: List[str]
+    policyTemplateIds: List[str]
+    edgeResourcesConfigurationIds: List[str]
+    eventDataProcessingConfigurationIds: List[str]
 
     @staticmethod
     def fromJSON(json_str: str) -> "ProvisioningSession":
