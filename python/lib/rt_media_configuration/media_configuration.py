@@ -48,6 +48,7 @@ from rt_m1_client.session import M1Session
 from rt_m1_client.data_store import DataStore
 
 from .media_session import MediaSession
+from .media_app_distribution import MediaAppDistribution
 from .delta_operations import *
 
 DEFAULT_CONFIG = '''[media-configuration]
@@ -81,6 +82,7 @@ configuration with the 5GMS AF.
         self.__log = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__m1_session = None
         self.__output_formatters = []
+        self.__app_distrib_cache = {}
 
     def __await__(self):
         '''``await`` provider for asynchronous instantiation.
@@ -120,9 +122,9 @@ configuration with the 5GMS AF.
         :return: ``True`` if the model was successfully restored.
         '''
         try:
-            m1_imp = await M1SessionImporter()
-            m1_imp.import_to(self)
             await self.__loadModelFromDatastore()
+            m1_imp = await M1SessionImporter(self.__m1_session)
+            m1_imp.import_to(self)
         except Exception as exc:
             self.__log.error(f"Failed to restore model: {exc}")
             return False
@@ -134,7 +136,7 @@ configuration with the 5GMS AF.
         :see: MediaSession constructor for parameters.
         :return: A new MediaSession object attached to this MediaConfiguration.
         '''
-        entry = await MediaSession(*args, **kwargs)
+        entry = await MediaSession(*args, configuration = self, **kwargs)
         if entry.id is None:
             entry.id = str(uuid.uuid4())
         self.__model["sessions"][entry.id] = entry
@@ -144,6 +146,7 @@ configuration with the 5GMS AF.
         if session.id is None:
             session.id = str(uuid.uuid4())
         self.__model["sessions"][session.id] = session
+        session.configuration = self
         return True
 
     async def removeMediaSession(self, *, session_id: Optional[str] = None, entry: Optional[MediaSession] = None) -> bool:
@@ -154,11 +157,13 @@ configuration with the 5GMS AF.
                 raise RuntimeError('MediaConfiguration.removeMediaEntry takes either session_id or entry, not both')
             if session_id not in self.__model["sessions"]:
                 return False
+            self.__model["sessions"][session_id].configuration = None
             del self.__model["sessions"][session_id]
             return True
         else:
             for k,v in self.__model["sessions"].items():
                 if v == entry:
+                    self.__model["sessions"][k].configuration = None
                     del self.__model["sessions"][k]
                     return True
         return False
@@ -168,6 +173,12 @@ configuration with the 5GMS AF.
 
     async def mediaSessionById(self, session_id: str) -> Optional[MediaSession]:
         return self.__model["sessions"].get(session_id, None)
+
+    async def mediaSessionByProvisioningSessionId(self, session_id: str) -> Optional[MediaSession]:
+        for v in self.__model["sessions"].values():
+            if v.provisioning_session_id == session_id:
+                return v
+        return None
 
     async def synchronise(self):
         '''Synchronise MediaConfiguration
@@ -238,7 +249,13 @@ configuration with the 5GMS AF.
                                     else:
                                         # copy over certificate Id to delta object if we already have it
                                         if session.certificates[cert_id].certificate_id is not None:
+                                            o_cert_ident = o_cert.identity()
                                             o_cert.certificate_id = session.certificates[cert_id].certificate_id
+                                            if o_cert.identity() != o_cert_ident:
+                                                o_session.certificates[o_cert.certificate_id] = o_cert
+                                                del o_session.certificates[o_cert_ident]
+                                        if session.certificates[cert_id].id is None:
+                                            session.certificates[cert_id].id = o_cert.id
                                         del certs_add[o_cert_id]
                                     break
                             else:
@@ -405,5 +422,44 @@ configuration with the 5GMS AF.
         now = datetime.datetime.now(tz=datetime.timezone.utc)
         near_expiry = now + datetime.timedelta(days=7)
         return cert_expiry <= near_expiry
+
+    async def set_data_store_app_distributions(self, provisioning_session_id: str, distribs: Optional[Iterable[MediaAppDistribution]]):
+        if distribs is None:
+            if provisioning_session_id in self.__app_distrib_cache:
+                del self.__app_distrib_cache[provisioning_session_id]
+                await self.__write_data_store_app_distributions()
+        else:
+            self.__app_distrib_cache[provisioning_session_id] = list(distribs)
+            await self.__write_data_store_app_distributions()
+
+    async def unset_data_store_app_distributions(self, provisioning_session_id: str):
+        await set_data_store_app_distributions(provisioning_session_id, None)
+
+    async def get_data_store_app_distributions(self, provisioning_session_id: str):
+        if len(self.__app_distrib_cache) == 0:
+            await self.__read_data_store_app_distributions()
+        if provisioning_session_id not in self.__app_distrib_cache:
+            return None
+        return self.__app_distrib_cache[provisioning_session_id]
+
+    async def __write_data_store_app_distributions(self):
+        if self.__data_store is not None:
+            obj = {}
+            for k,app_distribs_list in self.__app_distrib_cache.items():
+                distribs = [distrib.jsonObject() for distrib in app_distribs_list]
+                for app_dist in distribs:
+                    if 'entryPoints' in app_dist and app_dist['entryPoints'] is not None:
+                        app_dist['entryPoints'] = [ep.jsonObject() for ep in app_dist['entryPoints']]
+                obj[k] = distribs
+            await self.__data_store.set('app_distributions_by_provisioning_session', obj)
+
+    async def __loadModelFromDatastore(self):
+        await self.__read_data_store_app_distributions()
+
+    async def __read_data_store_app_distributions(self):
+        self.__app_distrib_cache = {}
+        obj = await self.__data_store.get('app_distributions_by_provisioning_session')
+        if obj is not None:
+            self.__app_distrib_cache = {k:[MediaAppDistribution.fromJSONObject(app_distrib) for app_distrib in v] for k,v in obj.items()}
 
 # vim:ts=8:sts=4:sw=4:expandtab:

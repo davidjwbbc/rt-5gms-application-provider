@@ -58,10 +58,56 @@ This class models the app-only distribution configurations for a MediaEntry.
             return False
         if self.__name != other.__name:
             return False
-        return self.__entry_points == other.__entry_points
+        if len(self.__entry_points) != len(other.__entry_points):
+            return False
+        return sorted(self.__entry_points) == sorted(other.__entry_points)
 
     def __ne__(self, other: "MediaAppDistribution") -> bool:
         return not (self == other)
+
+    def __lt__(self, other: "MediaAppDistribution") -> bool:
+        if other is None:
+            return False
+        if self.__name != other.name:
+            return self.__name < other.name
+        sep = self.__entry_points
+        oep = other.entry_points
+        lsep = len(sep)
+        loep = len(oep)
+        if lsep != loep:
+            return lsep < loep
+        ssep = sorted(self.__entry_points)
+        soep = sorted(other.entry_points)
+        if ssep != soep:
+            return ssep < soep
+        return False
+
+    def __le__(self, other: "MediaAppDistribution") -> bool:
+        if other is None:
+            return False
+        if self.__name != other.name:
+            return self.__name < other.name
+        sep = self.__entry_points
+        oep = other.entry_points
+        lsep = len(sep)
+        loep = len(oep)
+        if lsep != loep:
+            return lsep < loep
+        ssep = sorted(self.__entry_points)
+        soep = sorted(other.entry_points)
+        if ssep != soep:
+            return ssep < soep
+        return True
+
+    def __gt__(self, other: "MediaAppDistribution") -> bool:
+        if other is None:
+            return True
+        return other < self
+
+    def __ge__(self, other: "MediaAppDistribution") -> bool:
+        if other is None:
+            return True
+        return other <= self
 
     def __repr__(self) -> str:
         '''Python constructor string for this object'''

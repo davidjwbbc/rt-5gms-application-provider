@@ -58,7 +58,8 @@ This class models a 3GPP TS 26.512 ProvisioningSession. The ProvisioningSession 
                  certificates: Optional[Dict[str, MediaServerCertificate]] = None,
                  media_entry: Optional[MediaEntry] = None,
                  reporting_configurations: Optional[MediaReportingConfiguration] = None,
-                 dynamic_policies: Optional[Dict[str,MediaDynamicPolicy]] = None):
+                 dynamic_policies: Optional[Dict[str,MediaDynamicPolicy]] = None,
+                 configuration: Optional["MediaConfiguration"] = None):
         '''Constructor
 
         When this object is synchronised with the 5GMS AF it will gain a `provisioning_session_id` attribute.
@@ -72,8 +73,10 @@ This class models a 3GPP TS 26.512 ProvisioningSession. The ProvisioningSession 
         :param media_entry: The optional MediaEntry for this session.
         :param reporting_configurations: The reporting configurations to use with this media entry for publication via M5.
         :param dynamic_policies: The QoS dynamic policies to attach to this media entry for publication via M5.
+        :param configuration: The MediaConfiguration this session is attached to.
         :return: A new MediaSession object.
         '''
+        from .media_configuration import MediaConfiguration
         if ident is None:
             ident = str(uuid.uuid4())
         self.is_downlink = is_downlink
@@ -85,6 +88,7 @@ This class models a 3GPP TS 26.512 ProvisioningSession. The ProvisioningSession 
         self.media_entry = media_entry
         self.reporting_configurations = reporting_configurations
         self.dynamic_policies = dynamic_policies
+        self.configuration = configuration
         
     def __await__(self):
         return self.__asyncInit().__await__()
@@ -498,6 +502,17 @@ This class models a 3GPP TS 26.512 ProvisioningSession. The ProvisioningSession 
 
     def unsetDynamicPolicies(self):
         self.__dynamic_policies = None
+
+    @property
+    def configuration(self) -> Optional["MediaConfiguration"]:
+        return self.__configuration
+
+    @configuration.setter
+    def configuration(self, value: Optional["MediaConfiguration"]):
+        from .media_configuration import MediaConfiguration
+        if value is not None and not isinstance(value, MediaConfiguration):
+            raise ValueError('MediaSession.configuration can either be None or a MediaConfiguration')
+        self.__configuration = value
 
     async def gatherCertificateDetails(self, cert_id: str) -> Tuple[Optional[List[str]],Optional[datetime.datetime]]:
         cert = self.certificateByIdent(cert_id)

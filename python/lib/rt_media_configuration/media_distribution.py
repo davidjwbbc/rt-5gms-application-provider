@@ -117,7 +117,9 @@ This class models the distribution configurations for a MediaEntry.
     async def shalloweq(self, other: Optional["MediaDistribution"]) -> bool:
         if other is None:
             return False
+        # fields to only compare if they are set in both self and other
         only_if_set: Final[List[str]] = ['content_prep_template_id', 'canonical_domain_name', 'base_url']
+        # fields to only test the presence of, not the values
         not_values: Final[List[str]] = ['certificate_id']
         for param in self.__cmp_params:
             sp = getattr(self, param)

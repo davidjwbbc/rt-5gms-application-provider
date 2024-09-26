@@ -74,6 +74,8 @@ class MediaEntryDeltaOperation(DeltaOperation):
             # Remove media entry from 5GMS AF via M1
             if not await m1_session.contentHostingConfigurationRemove(self.session.provisioning_session_id):
                 return False
+            # Drop MediaAppDistributions from the data store
+            await self.session.configuration.unset_data_atore_app_distributions(self.session.provisioning_session_id)
             # Update the session by removing the media entry
             if update_container:
                 self.session.media_entry = None
@@ -86,6 +88,8 @@ class MediaEntryDeltaOperation(DeltaOperation):
                                                     await dc.to3GPPObject(self.session) for dc in self.__media_entry.distributions]}
             if not await m1_session.contentHostingConfigurationCreate(self.session.provisioning_session_id, chc):
                 return False
+            # Update DataStore to include MediaAppDistributions for the new config
+            await self.session.configuration.set_data_store_app_distributions(self.session.provisioning_session_id, self.__media_entry.app_distributions)
             # Load changes added by 5GMS AF to delta object (in case these are used later - may update object in another session)
             chc = await m1_session.contentHostingConfigurationGet(self.session.provisioning_session_id)
             if chc is not None:

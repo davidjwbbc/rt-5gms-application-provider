@@ -100,7 +100,7 @@ MediaConfiguration model.
                 if chc is not None:
                     dcs = [await MediaDistribution.from3GPPObject(dc) for dc in chc['distributionConfigurations']]
                     entry = await MediaEntry(chc['name'], chc['ingestConfiguration']['baseURL'], dcs)
-                    # TODO: Add AppDistributions from DataStore map
+                    entry.app_distributions = await model.get_data_store_app_distributions(psid)
                     entry.id = self.__psid_to_id_map.get(psid, psid)
                     entry.provisioning_session_id = psid
                     session.media_entry = entry
@@ -136,13 +136,14 @@ MediaConfiguration model.
         ret = set()
         x509 = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, public_cert)
         subject = x509.get_subject()
-        ret.add(subject.commonName)
+        #ret.add(subject.commonName)
         for ext_num in range(x509.get_extension_count()):
             ext = x509.get_extension(ext_num)
             ext_name = ext.get_short_name().decode('utf-8')
             if ext_name == "subjectAltName":
                 for s in str(ext).split(','):
-                    ret.add(s.strip())
+                    ret.add(s.strip().split(':',1)[1])
+        ret.remove(subject.commonName)
         return list(ret)
 
 
