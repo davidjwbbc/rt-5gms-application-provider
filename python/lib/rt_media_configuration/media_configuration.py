@@ -50,6 +50,7 @@ from rt_m1_client.data_store import DataStore
 from .media_session import MediaSession
 from .media_app_distribution import MediaAppDistribution
 from .delta_operations import *
+from .importers import M1SessionImporter
 
 DEFAULT_CONFIG = '''[media-configuration]
 m5_authority = example.com:7777
@@ -67,9 +68,9 @@ configuration with the 5GMS AF.
     __output_factories: ClassVar[Dict[str,Type["M8Output"]]] = {}
 
     def __init__(self, configfile: Optional[str] = None, asp_id: Optional[str] = None,
-                 persistent_data_store: Optional[DataStore] = None):
-        self.__model = {"sessions": {}, "aspId": None}
-        self.asp_id = asp_id
+                 persistent_data_store: Optional[DataStore] = None,
+                 m1_session: Optional[M1Session] = None):
+        self.__model = {"sessions": {}, "aspId": asp_id}
         if configfile is None:
             if os.getuid() != 0:
                 configfile = os.path.expanduser(os.path.join('~', '.rt-5gms', 'media.conf'))
@@ -80,7 +81,7 @@ configuration with the 5GMS AF.
         self.__config.addSection('media-configuration', DEFAULT_CONFIG, self.__extraConfigFile)
         self.__data_store = persistent_data_store
         self.__log = logging.getLogger(__name__ + '.' + self.__class__.__name__)
-        self.__m1_session = None
+        self.__m1_session = m1_session
         self.__output_formatters = []
         self.__app_distrib_cache = {}
 
@@ -193,8 +194,8 @@ configuration with the 5GMS AF.
             cert_signer = self.__config.get('certificate_signing_class')
             self.__m1_session = await M1Session(host_address=m1_authority, persistent_data_store=self.__data_store,
                                                 certificate_signer=cert_signer)
-        af_mc = await MediaConfiguration(self.__extraConfigFile, asp_id=self.__model['aspId'], persistent_data_store=self.__data_store)
-        af_imp = await M1SessionImporter(authority=m1_authority, persistent_data_store=self.__data_store, certificate_signer=cert_signer)
+        af_mc = await MediaConfiguration(self.__extraConfigFile, asp_id=self.__model['aspId'], persistent_data_store=self.__data_store, m1_session=self.__m1_session)
+        af_imp = await M1SessionImporter(self.__m1_session)
         await af_imp.import_to(af_mc)
         deltas = await af_mc.deltas(self)
         self.__log.info('Synchronising model to 5GMS AF')
@@ -433,7 +434,7 @@ configuration with the 5GMS AF.
             await self.__write_data_store_app_distributions()
 
     async def unset_data_store_app_distributions(self, provisioning_session_id: str):
-        await set_data_store_app_distributions(provisioning_session_id, None)
+        await self.set_data_store_app_distributions(provisioning_session_id, None)
 
     async def get_data_store_app_distributions(self, provisioning_session_id: str):
         if len(self.__app_distrib_cache) == 0:
