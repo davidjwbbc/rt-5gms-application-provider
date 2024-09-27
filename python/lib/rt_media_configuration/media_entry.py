@@ -46,15 +46,17 @@ distribution points to be added. The ProvisioningSession information will be pub
 information will only be published via M8.
 '''
 
-    def __init__(self, name: str, ingest_url_prefix: str, distributions: Iterable[MediaDistribution], is_pull: bool = True,
+    def __init__(self, name: str, ingest_url_prefix: str, distributions: Iterable[MediaDistribution],
+                 protocol: str = 'urn:3gpp:5gms:content-protocol:http-pull-ingest', is_pull: bool = True,
                  app_distributions: Optional[Iterable[MediaAppDistribution]] = None):
         '''Constructor
 
         When this object is synchronised with the 5GMS AF it will gain a `provisioning_session_id` attribute.
 
         :param name: The name of this media entry.
-        :param ingest_url: The ingest URL prefix for this media entry.
+        :param ingest_url_prefix: The ingest URL prefix for this media entry.
         :param distributions: A list of MediaDistributions (min. 1 entry) to directly attach to be published via M5.
+        :param protocol: A "urn:3gpp:5gms:content-protocol" identifier for the ingest protocol.
         :param is_pull: This media entry will pull media from the source.
         :param app_distributions: An optional list of MediaAppDistributions to attach to the media entry to be published via M8.
         :return: A new MediaEntry object attached to be attached to a MediaSession.
@@ -62,6 +64,7 @@ information will only be published via M8.
         self.name = name
         self.ingest_url_prefix = ingest_url_prefix
         self.distributions = distributions
+        self.protocol = protocol
         self.is_pull = is_pull
         self.app_distributions = app_distributions
         
@@ -70,6 +73,8 @@ information will only be published via M8.
 
     def __eq__(self, other: "MediaEntry") -> bool:
         if (self.__name != other.__name):
+            return False
+        if (self.__protocol != other.protocol):
             return False
         if (self.__ingest_url_prefix != other.__ingest_url_prefix):
             return False
@@ -93,6 +98,8 @@ information will only be published via M8.
         if (self.__name != other.__name):
             return False
         if (self.__ingest_url_prefix != other.__ingest_url_prefix):
+            return False
+        if (self.__protocol != other.protocol):
             return False
         if (self.__is_pull != other.__is_pull):
             return False
@@ -121,7 +128,7 @@ information will only be published via M8.
 
     def __repr__(self) -> str:
         '''Python constructor string for this object'''
-        ret = f'{self.__class__.__name__}({self.__name!r}, {self.__ingest_url_prefix!r}, {self.__distributions!r}'
+        ret = f'{self.__class__.__name__}({self.__name!r}, {self.__ingest_url_prefix!r}, {self.__distributions!r}, {self.__protocol!r}'
         if not self.__is_pull:
             ret += ', is_pull=False'
         if self.__app_distributions is not None and len(self.__app_distributions) > 0:
@@ -165,6 +172,8 @@ information will only be published via M8.
             elif k == 'distributionConfigurations':
                 dcs = [MediaDistribution.fromJSONObject(dc) for dc in v]
                 mand_fields.remove(k)
+            elif k == 'ingestProtocol':
+                kwargs['protocol'] = v
             elif k == 'pull':
                 kwargs['is_pull'] = v
             elif k == "appDistributions":
@@ -176,7 +185,7 @@ information will only be published via M8.
         return MediaEntry(name, ingest_url, dcs, **kwargs)
 
     def jsonObject(self) -> dict:
-        obj = {"name": self.__name, "ingestURL": self.__ingest_url_prefix, "distributionConfiguration": self.__distributions}
+        obj = {"name": self.__name, "ingestURL": self.__ingest_url_prefix, "distributionConfiguration": self.__distributions, 'ingestProtocol': self.__protocol}
         if not self.__is_pull:
             obj['pull'] = False
         if self.__app_distributions is not None and len(self.__app_distributions) > 0:
@@ -199,6 +208,18 @@ information will only be published via M8.
         if not isinstance(value, str):
             raise TypeError('MediaEntry.name must be a str')
         self.__name = value
+
+    @property
+    def protocol(self) -> str:
+        return self.__protocol
+
+    @protocol.setter
+    def protocol(self, value: str):
+        if not isinstance(value, str):
+            raise TypeError('MediaEntry.protocol must be a str')
+        if not value.startswith('urn:3gpp:5gms:content-protocol:'):
+            raise ValueError('MediaEntry.protocol must be a URN starting with "urn:3gpp:5gms:content-protocol:"')
+        self.__protocol = value
 
     @property
     def ingest_url_prefix(self) -> str:

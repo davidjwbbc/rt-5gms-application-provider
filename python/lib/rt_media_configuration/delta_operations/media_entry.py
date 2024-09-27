@@ -83,6 +83,7 @@ class MediaEntryDeltaOperation(DeltaOperation):
             # Add media entry to 5GMS AF via M1
             chc: Optional[ContentHostingConfiguration] = {'name': self.__media_entry.name,
                                                           'ingestConfiguration': {'pull': self.__media_entry.is_pull,
+                                                                                  'protocol': self.__media_entry.protocol,
                                                                                   'baseURL': self.__media_entry.ingest_url_prefix},
                                                           'distributionConfigurations': [
                                                     await dc.to3GPPObject(self.session) for dc in self.__media_entry.distributions]}

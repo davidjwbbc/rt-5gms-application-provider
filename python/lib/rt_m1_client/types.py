@@ -300,20 +300,28 @@ class DistributionConfiguration(TypedDict, total=False):
             s += ', '.join([f'{sdn[0]} => {sdn[1]}' for sdn in dc['supplementaryDistributionNetworks']])
         return s
 
-class IngestConfiguration(TypedDict, total=False):
+class IngestConfigurationMandatory(TypedDict):
     '''
-    IngestConfiguration structure from TS 26.512
+    Mandatory fields from the ContentHostingConfiguration.ingestConfiguration structure from TS 26.512
     '''
     pull: bool
     protocol: Uri
+
+class IngestConfiguration(IngestConfigurationMandatory, total=False):
+    '''
+    ContentHostingConfiguration.ingestConfiguration structure from TS 26.512
+    '''
     baseURL: Uri
 
     @staticmethod
     def format(ic: "IngestConfiguration", indent: int = 0) -> str:
         prefix = ' ' * indent
-        return f'''{prefix}Type: {ic['protocol']}
+        ret = f'''{prefix}Type: {ic['protocol']}
 {prefix}Pull Ingest?: {ic['pull']!r}
-{prefix}URL: {ic['baseURL']}'''
+'''
+        if 'baseURL' in ic:
+            ret += f"{prefix}URL: {ic['baseURL']}\n"
+        return ret
 
 class ContentHostingConfigurationMandatory(TypedDict):
     '''
