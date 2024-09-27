@@ -98,24 +98,53 @@ This file defines the streams to configure and is located at
                 "locationReporting": true,
                 "accessReporting": true,
             },
-            "metricsReporting":[
-            {
-               "scheme":"scheme1",
-               "reportingInterval":5,
-               "samplePercentage":33,
-               "samplingPeriod":1
-            },
-            {
-               "reportingInterval":10,
-               "samplePercentage":66,
-               "samplingPeriod":2
-            },
-            {
-               "scheme":"scheme3",
-               "reportingInterval":15,
-               "samplePercentage":99,
-               "samplingPeriod":3
-            }
+            "metricsReporting": [
+               {
+                  "samplingPeriod": 1
+               },
+               {
+                  "scheme": "scheme1",
+                  "sliceScope": [
+                     {"sst": 1, "sd": "ABCDEF"},
+                     {"sst": 1, "sd": "123456"}
+                  ],
+                  "dataNetworkName": "dnn-name",
+                  "reportingInterval": 60,
+                  "samplePercentage": 80.0,
+                  "urlFilters": [
+                     "^http://my\\.domain\\.com/.*\\.(mpd|m3u|mp4|mpg)$",
+                     "^https?://other\\.domain\\.com/",
+                     "\\.(mov|mkv|avi)$"
+                  ],
+                  "metrics": [
+                     "urn:3GPP:ns:PSS:DASH:QM10#HTTPList",
+                     "urn:3GPP:ns:PSS:DASH:QM10#BufferLevel",
+                     "urn:3GPP:ns:PSS:DASH:QM10#RepSwitchList",
+                     "urn:3GPP:ns:PSS:DASH:QM10#MPDInformation"
+                  ],
+                  "samplingPeriod": 10
+               },
+               {
+                  "metrics": [
+                     "urn:identifier:for:first:metric",
+                     "urn:3GPP:ns:PSS:DASH:QM10#HTTPList",
+                     "urn:3GPP:ns:PSS:DASH:QM10#BufferLevel",
+                     "urn:3GPP:ns:PSS:DASH:QM10#RepSwitchList",
+                     "urn:3GPP:ns:PSS:DASH:QM10#MPDInformation"
+                  ],
+                  "reportingInterval": 10,
+                  "samplePercentage": 66,
+                  "samplingPeriod": 2
+               },
+               {
+                  "scheme": "scheme3",
+                  "sliceScope": [
+                     {"sst": 1, "sd": "000001"}
+                  ],
+                  "reportingInterval": 15,
+                  "samplePercentage": 99,
+                  "samplingPeriod": 3
+               }
             ],
             "policies": {
                 "policy-external-ref-1": {
@@ -214,451 +243,16 @@ the *streams* map should not have any *distributionConfigurations.entryPoint*
 fields defined so that it acts as a top level ingest point for multiple media.
 '''
 
-import aiofiles
 import asyncio
-import configparser
-import importlib
-import json
-import logging
 import os.path
 import sys
-from typing import List, Optional
 
-#installed_packages_dir = '@python_packages_dir@'
-#if os.path.isdir(installed_packages_dir) and installed_packages_dir not in sys.path:
-#    sys.path.append(installed_packages_dir)
-
-from rt_m1_client.session import M1Session
-from rt_m1_client.exceptions import M1Error
-from rt_m1_client.data_store import JSONFileDataStore
-from rt_m1_client.types import ContentHostingConfiguration, DistributionConfiguration, IngestConfiguration, M1MediaEntryPoint, PathRewriteRule, ConsumptionReportingConfiguration, PolicyTemplate, M1QoSSpecification, ChargingSpecification, AppSessionContext, Snssai, MetricsReportingConfiguration
-from rt_m1_client.configuration import Configuration
+from rt_m1_client import M1Session, M1Error, JSONFileDataStore, Configuration, app_configuration
+from rt_media_configuration import MediaConfiguration, StreamsJSONImporter
 
 g_streams_config = os.path.join(os.path.sep, 'etc', 'rt-5gms', 'streams.json')
-g_sync_config = os.path.join(os.path.sep, 'etc', 'rt-5gms', 'af-sync.conf')
-
-logging.basicConfig(level=logging.INFO)
-g_log = logging.getLogger(__name__)
-
-def log_debug(*args, **kwargs):
-    global g_log
-    g_log.debug(*args, **kwargs)
-
-def log_info(*args, **kwargs):
-    global g_log
-    g_log.info(*args, **kwargs)
-
-def log_warn(*args, **kwargs):
-    global g_log
-    g_log.warn(*args, **kwargs)
-
-def log_error(*args, **kwargs):
-    global g_log
-    g_log.error(*args, **kwargs)
-
-async def path_rewrite_rule_equal(a: PathRewriteRule, b: PathRewriteRule) -> bool:
-    if a['requestPathPattern'] != b['requestPathPattern']:
-        return False
-    if a['mappedPath'] != b['mappedPath']:
-        return False
-    return True
-
-async def path_rewrite_rules_equal(a: List[PathRewriteRule], b: List[PathRewriteRule]) -> bool:
-    if len(a) != len(b):
-        return False
-    for prr_a in a:
-        for prr_b in b:
-            if await path_rewrite_rule_equal(prr_a, prr_b):
-                break
-        else:
-            return False
-    return True
-
-async def entry_points_equal(a: M1MediaEntryPoint, b: M1MediaEntryPoint) -> bool:
-    if a['relativePath'] != b['relativePath']:
-        return False
-    if a['contentType'] != b['contentType']:
-        return False
-    if 'profiles' not in a and 'profiles' not in b:
-        return True
-    if 'profiles' in a and 'profiles' in b and set(a['profiles']) == set(b['profiles']):
-        return True
-    return False
-
-async def distrib_config_equal(a: DistributionConfiguration, b: DistributionConfiguration) -> bool:
-    a_keys = set(a.keys())
-    b_keys = set(b.keys())
-    # Ignore fields generated by the AF
-    for gen_field in ['canonicalDomainName', 'baseURL']:
-        a_keys.discard(gen_field)
-        b_keys.discard(gen_field)
-    # Distribution configuration must have the same fields present
-    if a_keys != b_keys:
-        return False
-
-    if 'entryPoint' in a and not await entry_points_equal(a['entryPoint'], b['entryPoint']):
-        return False
-    if 'contentPreparationTemplateId' in a and a['contentPreparationTemplateId'] != b['contentPreparationTemplateId']:
-        return False
-    if 'domainNameAlias' in a and a['domainNameAlias'] != b['domainNameAlias']:
-        return False
-    if 'pathRewriteRules' in a and not await path_rewrite_rules_equal(a['pathRewriteRules'], b['pathRewriteRules']):
-        return False
-
-    # Ignore: cachingConfigurations, geoFencing, urlSignature, supplementaryDistributionNetworks
-
-    return True
-
-async def distrib_configs_equal(a: List[DistributionConfiguration], b: List[DistributionConfiguration]) -> bool:
-    if len(a) != len(b):
-        return False
-    for dc_a in a:
-        for dc_b in b:
-            if await distrib_config_equal(dc_a, dc_b):
-                break
-        else:
-            return False
-    return True
-
-async def _flagsEqual(a: Optional[bool], b: Optional[bool]) -> bool:
-    if a is None and b is None:
-        return True
-    if a is None and b is not None and not b:
-        return True
-    if b is None and a is not None and not a:
-        return True
-    if a is not None and b is not None and a == b:
-        return True
-    return False
-
-async def consumption_reporting_equal(a: Optional[ConsumptionReportingConfiguration], b: Optional[ConsumptionReportingConfiguration]) -> bool:
-    if a is None and b is None:
-        return True
-    if a is None and b is not None:
-        return False
-    if b is None and a is not None:
-        return False
-    for i in ['locationReporting', 'accessReporting']:
-        if not await _flagsEqual(a.get(i, None), b.get(i, None)):
-            return False
-    for i in ['reportingInterval', 'samplePercentage']:
-        if i in a and i not in b:
-            return False
-        if i in b and i not in a:
-            return False
-        if i in a and a[i] != b[i]:
-            return False
-    return True
-
-async def metrics_configuration_match(m1: Optional[MetricsReportingConfiguration], m2: Optional[MetricsReportingConfiguration]) -> bool:
-    if m1 is None and m2 is None:
-        return True
-    if m1 is None or m2 is None:
-        return False
-
-    metrics_configuration_parameters = ['scheme', 'reportingInterval', 'samplePercentage', 'samplingPeriod']
-
-    for parameters in metrics_configuration_parameters:
-        values_first = getattr(m1, parameters, None)
-        values_second = getattr(m2, parameters, None)
-        if values_first != values_second:
-            return False
-
-    return True
-
-
-async def snssai_match(sai1: Optional[Snssai], sai2: Optional[Snssai]) -> bool:
-    if sai1 is None and sai2 is None:
-        return True
-    if sai1 is None or sai2 is None:
-        return False
-    for i in ['sst', 'sd']:
-        if i not in sai1 and i in sai2:
-            return False
-        if i in sai1 and i not in sai2:
-            return False
-        if i in sai1 and sai1[i] != sai2[i]:
-            return False
-    return True
-
-async def m1_qos_specs_match(qos1: Optional[M1QoSSpecification], qos2: Optional[M1QoSSpecification]) -> bool:
-    if qos1 is None and qos2 is None:
-        return True
-    if qos1 is None or qos2 is None:
-        return False
-    for i in ['qosReference', 'maxAuthBtrUl', 'maxAuthBtrDl', 'defPacketLossRateDl', 'defPacketLossRateUl']:
-        if i not in qos1 and i in qos2:
-            return False
-        if i in qos1 and i not in qos2:
-            return False
-        if i in qos1 and qos1[i] != qos2[i]:
-            return False
-    return True
-
-async def policy_app_sessions_match(as1: Optional[AppSessionContext], as2: Optional[AppSessionContext]) -> bool:
-    if as1 is None and as2 is None:
-        return True
-    if as1 is None or as2 is None:
-        return False
-    if not await snssai_match(as1.get('sliceInfo', None), as2.get('sliceInfo', None)):
-        return False
-    if 'dnn' not in as1 and 'dnn' in as2:
-        return False
-    if 'dnn' in as1 and 'dnn' not in as2:
-        return False
-    if 'dnn' in as1 and as1['dnn'] != as2['dnn']:
-        return False
-    return True
-
-async def charging_specs_match(cs1: Optional[ChargingSpecification], cs2: Optional[ChargingSpecification]) -> bool:
-    if cs1 is None and cs2 is None:
-        return True
-    if cs1 is None or cs2 is None:
-        return False
-    for i in ['sponId', 'sponStatus']:
-        if i in cs1 and i not in cs2:
-            return False
-        if i not in cs1 and i in cs2:
-            return False
-        if i in cs1 and cs1[i] != cs2[i]:
-            return False
-    if 'gpsi' in cs1 and 'gpsi' not in cs2:
-        return False
-    if 'gpsi' not in cs1 and 'gpsi' in cs2:
-        return False
-    if 'gpsi' in cs1 and sorted(cs1['gpsi']) != sorted(cs2['gpsi']):
-        return False
-    return True
-
-async def policies_match(p1: Optional[PolicyTemplate], p2: Optional[PolicyTemplate]) -> bool:
-    if p1 is None and p2 is None:
-        return True
-    if p1 is None or p2 is None:
-        return False
-    if 'externalReference' in p1 and 'externalReference' not in p2:
-        return False
-    if 'externalReference' not in p1 and 'externalReference' in p2:
-        return False
-    if 'externalReference' in p1 and p1['externalReference'] != p2['externalReference']:
-        return False
-    if not await policy_app_sessions_match(p1.get('applicationSessionContext', None), p2.get('applicationSessionContext', None)):
-        return False
-    # ignore read-only fields policyTemplateId, state and stateReason
-    if not await m1_qos_specs_match(p1.get('qoSSpecification', None), p2.get('qoSSpecification', None)):
-        return False
-    if not await charging_specs_match(p1.get('chargingSpecification', None), p2.get('chargingSpecification', None)):
-        return False
-    return True
-
-async def sync_configuration(m1: M1Session, streams: dict) -> dict:
-    have = {}
-    to_check = streams['streams']
-    del_ps_id = []
-    stream_map = {}
-    for ps_id in await m1.provisioningSessionIds():
-        chc = await m1.contentHostingConfigurationGet(ps_id)
-        if chc is None:
-            log_warn(f'Provisioning Session {ps_id} has no ContentHostingConfiguration, removing from the AF')
-            del_ps_id += [ps_id]
-            continue
-        for chk_id, chk_stream in to_check.items():
-            if (
-                    chk_stream['name'] == chc['name'] and
-                    chk_stream['ingestURL'] == chc['ingestConfiguration']['baseURL'] and
-                    await distrib_configs_equal(chk_stream['distributionConfigurations'], chc['distributionConfigurations'])
-                    ):
-                del to_check[chk_id]
-                have[chk_id] = chk_stream
-                stream_map[chk_id] = ps_id
-                break
-        else:
-            del_ps_id += [ps_id]
-    # have = already configured, to_check = need to configure, del_ps_id = configuration not found in the configured streams
-    for ps_id in del_ps_id:
-        await m1.provisioningSessionDestroy(ps_id)
-    for cfg_id, cfg in to_check.items():
-        chc = { 'name': cfg['name'],
-                'ingestConfiguration': {
-                    'baseURL': cfg['ingestURL'],
-                    'pull': True,
-                    'protocol': 'urn:3gpp:5gms:content-protocol:http-pull-ingest',
-                },
-                'distributionConfigurations': cfg['distributionConfigurations'],
-                }
-        crc = cfg.get('consumptionReporting', None)
-        policies = cfg.get('policies', None)
-        metrics_configurations = cfg.get('metricsReporting', None)
-        ps_id = await m1.createDownlinkPullProvisioningSession(streams.get('appId'), streams.get('aspId', None))
-        if ps_id is None:
-            log_error("Failed to create Provisioning Session for %r", cfg)
-        else:
-            stream_map[cfg_id] = ps_id
-            certs = {}
-            for dc in chc['distributionConfigurations']:
-                if 'certificateId' in dc:
-                    if dc['certificateId'] not in certs:
-                        cert_id = await m1.createNewCertificate(ps_id, extra_domain_names=dc.get('domainNameAlias', None))
-                        if cert_id is None:
-                            log_error("Failed to create certificate for Provisioning Session %s, skipping %r", ps_id, cfg)
-                            chc = None
-                            break
-                        certs[dc['certificateId']] = cert_id
-                    else:
-                        cert_id = certs[dc['certificateId']]
-                    dc['certificateId'] = cert_id
-            if chc is not None:
-                if not await m1.contentHostingConfigurationCreate(ps_id, chc):
-                    log_error("Failed to create ContentHostingConfiguration for Provisioning Session %s, skipping %r", ps_id, cfg)
-            if crc is not None:
-                if not await m1.consumptionReportingConfigurationCreate(ps_id, crc):
-                    log_error("Failed to activate ConsumptionReportingConfiguration for Provisioning Session %s")
-
-            if metrics_configurations is not None:
-                if not isinstance (metrics_configurations, list):
-                    log_error(f'Configured metrics for provisioning session "{cfg_id}" should be an array')
-                    return            
-                for metrics_configuration in metrics_configurations:
-                    result = await m1.metricsReportingConfigurationCreate(ps_id, metrics_configuration)
-                    if result is None:
-                        log_error(f'Failed to create metrics reporting configuration in provisioning session {ps_id}')
-            
-            if policies is not None:
-                if isinstance(policies,dict):
-                    pol_list = policies.items()
-                elif isinstance(policies,list):
-                    pol_list = [(p.get('externalReference', None), p) for p in policies]
-                else:
-                    log_error(f'Configured policies for provisioning session "{cfg_id}" should be an object or array')
-                    pol_list = None
-                if pol_list is not None:
-                    for ext_id, pol in pol_list:
-                        pt = dict()
-                        if ext_id is not None:
-                            pt.update({'externalReference': ext_id})
-                        pt.update(pol)
-                        result = await m1.policyTemplateCreate(ps_id, pt)
-                        if result is None:
-                            log_error(f'Failed to create policy template {ext_id!r} in provisioning session {ps_id}')
-    # Check for other changes in the configured sessions
-    for cfg_id, cfg in have.items():
-        # Check for ConsumptionReportingConfiguration changes in already configured sessions
-        ps_id = stream_map[cfg_id]
-        old_crc: Optional[ConsumptionReportingConfiguration] = await m1.consumptionReportingConfigurationGet(ps_id)
-        new_crc: Optional[ConsumptionReportingConfiguration] = cfg.get('consumptionReporting', None)
-        if not await consumption_reporting_equal(old_crc, new_crc):
-            if old_crc is None:
-                # No pre-existing CRC, add the new one
-                if not await m1.consumptionReportingConfigurationCreate(ps_id, new_crc):
-                    log_error("Failed to activate ConsumptionReportingConfiguration for Provisioning Session %s", ps_id)
-            elif new_crc is None:
-                # There is a CRC, but shouldn't be one, remove it
-                if not await m1.consumptionReportingConfigurationDelete(ps_id):
-                    log_error("Failed to remove ConsumptionReportingConfiguration for Provisioning Session %s", ps_id)
-            else:
-                # The CRC has changed, update it
-                if not await m1.consumptionReportingConfigurationUpdate(ps_id, new_crc):
-                    log_error("Failed to update ConsumptionReportingConfiguration for Provisioning Session %s", ps_id)
-
-        # Check for MetricsReportingConfiguration changes in already configured sessions
-        existing_metrics_ids = await m1.metricsReportingConfigurationIds(ps_id)
-        metrics_configs = cfg.get('metricsReporting', [])
-        if not isinstance(metrics_configs, list):
-            log_error(f'Configured metrics for provisioning session "{ps_id}" should be a list')
-            return
-        existing_metrics = {mrc_id: await m1.metricsReportingConfigurationGet(ps_id, mrc_id) for mrc_id in existing_metrics_ids}
-        new_metrics_configurations = metrics_configs.copy()
-        # Assume deletion of all existing metrics
-        del_metrics = list(existing_metrics_ids)
-
-        for existing_id, existing_config in existing_metrics.items():
-            found = False
-            for new_config in new_metrics_configurations:
-                if await metrics_configuration_match(existing_config, new_config):
-                    new_metrics_configurations.remove(new_config)
-                    del_metrics.remove(existing_id)
-                    found = True
-                    break
-
-        for mrc_id in del_metrics:
-            await m1.metricsReportingConfigurationDelete(ps_id, mrc_id)
-
-        for metrics_configuration in new_metrics_configurations:
-            if await m1.metricsReportingConfigurationCreate(ps_id, metrics_configuration) is None:
-                log_error(f'Failed to create new metrics reporting configuration in provisioning session {ps_id}')
-
-        # Check PolicyTemplates for changes in the already configured sessions
-        del_policy: List[ResourceId] = []
-        have_policy: List[ResourceId] = []
-        new_policy: List[PolicyTemplate] = []
-        old_pol_ids: Optional[List[ResourceId]] = await m1.policyTemplateIds(ps_id)
-        policies = cfg.get('policies', None)
-        pol_list = None
-        if policies is not None:
-            if isinstance(policies,dict):
-                pol_list = policies.items()
-            elif isinstance(policies,list):
-                pol_list = [(p.get('externalReference', None), p) for p in policies]
-            else:
-                log_error(f'Configured policies for provisioning session "{cfg_id}" should be an object or array')
-        if old_pol_ids is None or len(old_pol_ids) == 0:
-            if policies is not None:
-                if pol_list is not None:
-                    for pol_ext_id, pol in pol_list:
-                        pt = dict()
-                        if pol_ext_id is not None:
-                            pt.update({'externalReference': pol_ext_id})
-                        pt.update(pol)
-                        new_policy += [pt]
-        else:
-            new_pol_left = pol_list
-            for pol_id in old_pol_ids:
-                if new_pol_left is None or len(new_pol_left) == 0:
-                    del_policy += [pol_id]
-                else:
-                    old_pol: Optional[PolicyTemplate] = await m1.policyTemplateGet(ps_id, pol_id)
-                    next_new_pol_list = []
-                    found = False
-                    for pol_ext_id, pol in new_pol_left:
-                        if not found and await policies_match(old_pol, pol):
-                            have_policy += [pol_id]
-                            found = True
-                        else:
-                            next_new_pol_list += [(pol_ext_id, pol)]
-                    if not found:
-                        del_policy += [pol_id]
-                    new_pol_left = next_new_pol_list
-            for pol_ext_id, pol in new_pol_left:
-                pt = dict()
-                if pol_ext_id is not None:
-                    pt.update({'externalReference': pol_ext_id})
-                pt.update(pol)
-                new_policy += [pt]
-        # Now we have del_policy as a list of policy ids to delete, have_policy as a list of ids to keep and new_policy as a list
-        # of new policies to add.
-        for pol_id in del_policy:
-            await m1.policyTemplateDelete(ps_id, pol_id)
-        for pol in new_policy:
-            await m1.policyTemplateCreate(ps_id, pol)
-    return stream_map
-
-async def get_app_config() -> configparser.ConfigParser:
-    global g_sync_config
-    config = configparser.ConfigParser()
-    config.read_string('''
-[af-sync]
-m5_authority = 127.0.0.23:7777
-docroot = /var/cache/rt-5gms/as/docroots
-default_docroot = /usr/share/nginx/html
-''', source='defaults')
-    async with aiofiles.open(g_sync_config, mode='r') as conffile:
-        config.read_string(await conffile.read(), source=g_sync_config)
-    return config
-
-async def get_streams_config() -> dict:
-    global g_streams_config
-    async with aiofiles.open(g_streams_config, mode='r') as infile:
-        streams = json.loads(await infile.read())
-    return streams
+# Old configuration file now moved to /etc/rt-5gms/media.conf or ~/.rt-5gms/media.conf
+#g_sync_config = os.path.join(os.path.sep, 'etc', 'rt-5gms', 'af-sync.conf')
 
 async def get_m1_session(cfg: Configuration) -> M1Session:
     data_store = None
@@ -668,55 +262,16 @@ async def get_m1_session(cfg: Configuration) -> M1Session:
     session = await M1Session((cfg.get('m1_address', 'localhost'), cfg.get('m1_port',7777)), data_store, cfg.get('certificate_signing_class'))
     return session
 
-async def dump_m8_files(m1: M1Session, stream_map: dict, vod_streams: List[dict], cfg: Configuration, config: configparser.ConfigParser):
-    # Assume M5 and M1 share an interface
-    m8_config = {'m5BaseUrl': f'http://{config.get("af-sync", "m5_authority")}/3gpp-m5/v2/', 'serviceList': []}
-    publish_dirs = {config.get("af-sync", "default_docroot")}
-    vod_stream_ids = set([v['stream'] for v in vod_streams])
-    vod_ps_ids = set([v for k,v in stream_map.items() if k in vod_stream_ids])
-    for ps_id in await m1.provisioningSessionIds():
-        log_debug("Probing Provisioning Session %s", ps_id)
-        chc = await m1.contentHostingConfigurationGet(ps_id)
-        if chc is not None:
-            if ps_id not in vod_ps_ids:
-                m8_config['serviceList'] += [{'provisioningSessionId': ps_id, 'name': chc['name']}]
-            for dc in chc['distributionConfigurations']:
-                for hostfield in ['canonicalDomainName', 'domainNameAlias']:
-                    if hostfield in dc:
-                        publish_dirs.add(os.path.join(config.get("af-sync", "docroot"), dc[hostfield]))
-        else:
-            log_error(f"Provisioning Session {ps_id} was not initialised correctly: omitting")
-    for vod in vod_streams:
-        ps_id = stream_map[vod['stream']]
-        chc = await m1.contentHostingConfigurationGet(ps_id)
-        if chc is not None:
-            entryPoints = []
-            for vep in vod['entryPoints']:
-                for dc in chc['distributionConfigurations']:
-                    ep = {'locator': dc['baseURL'] + vep['relativePath'], 'contentType': vep['contentType']}
-                    if 'profiles' in vep:
-                        ep['profiles'] = vep['profiles']
-                    entryPoints += [ep]
-            m8_config['serviceList'] += [{'provisioningSessionId': ps_id, 'name': vod['name'], 'entryPoints': entryPoints}]
-        else:
-            log_error(f"Provisioning Session {ps_id} not initialised correctly: unable to include '{vod['name']}' in M8 data")
-    m8_json = json.dumps(m8_config)
-    log_debug("m8_json = %r", m8_json)
-    log_info("Publishing M8 info to: %s", ', '.join(publish_dirs))
-    for pdir in publish_dirs:
-        pfile = os.path.join(pdir, 'm8.json')
-        async with aiofiles.open(pfile, mode='w') as outfile:
-            await outfile.write(m8_json)
-
 async def main():
-    cfg = Configuration()
+    cfg = app_configuration
     session = await get_m1_session(cfg)
-    streams = await get_streams_config()
-    config = await get_app_config()
-
-    stream_map = await sync_configuration(session, streams)
-
-    await dump_m8_files(session, stream_map, streams['vodMedia'], cfg, config)
+    media_cfg = await MediaConfiguration(
+                                # configfile=g_sync_config,
+                                persistent_data_store=session.data_store(),
+                                m1_session=session)
+    imp = await StreamsJSONImporter(g_streams_config)
+    await imp.import_to(media_cfg)
+    await media_cfg.synchronise()
 
     return 0
 
