@@ -1,0 +1,142 @@
+classDiagram
+    class MediaConfiguration{
+        +str asp_id
+        +str serialise(bool pretty=False)
+        +reset()
+        +bool restoreModel()
+        +MediaSession newMediaSession(*args, **kwargs)
+        +bool addMediaSession(MediaSession session)
+        +bool removeMediaSession(str session_id=None, MediaSession entry=None)
+        +iter mediaSessions()
+        +MediaSession mediaSessionById(str session_id)
+        +synchronise()
+        +list deltas(MediaConfiguration other)
+    }
+    class MediaSession{
+        +bool is_downlink
+        +str external_app_id
+        +str asp_id
+        +dict[str->MediaServerCertificate] certificates
+        +MediaEntry media_entry
+        +MediaReportingConfiguration reporting_configurations
+        +dict[str->MediaDynamicPolicy] dynamic_policies
+        +bool shallow_eq(MediaSession other)
+        +str serialise(bool pretty=False)
+        MediaSession deserialise(str json_string)$
+        MediaSession fromJSONObject(dict object)$
+        +dict jsonObject()
+        +str identity()
+        +addCertificate(MediaServerCertificate cert)
+        +bool removeCertificate(str ident=None, MediaServerCertificate certificate=None)
+        +MediaServerCertificate certificateByCertId(str ident)
+        +MediaServerCertificate certificateByLocalId(str ident)
+        +MediaServerCertificate certificateByIdent(str ident)
+        +setConsumptionReportingConfiguration(MediaConsumptionReportingConfiguration config)
+        +unsetConsumptionReportingConfiguration()
+        +addMetricsReportingConfiguration(MediaMetricsReportingConfiguration config)
+        +bool removeMetricsReportingConfiguration(MediaMetricsReportingConfiguration config)
+        +unsetMetricsReportingConfigurations()
+        +addDynamicPolicy(str external_reference, MediaDynamicPolicy policy)
+        +removeDynamicPolicy(str external_reference)
+        +unsetDynamicPolicies()
+    }
+    class MediaEntry{
+        +str name
+        +str ingest_url_prefix
+        +bool is_pull
+        +list[MediaDistribution] distributions
+        +list[MediaAppDistribution] app_distributions
+    }
+    class MediaDistribution{
+        +str domain_name_alias
+        +str certificate_id
+        +MediaEntryPoint entry_point
+    }
+    class MediaAppDistribution{
+        +str name
+        +list[MediaEntryPoint] entry_points
+    }
+    class MediaEntryPoint{
+        +str relative_url
+        +str content_type
+        +list[str] profiles
+    }
+    class MediaServerCertificate{
+        +str id
+        +str certificate_id
+        +list[str] domain_names
+        +str public_cert
+    }
+    class MediaReportingConfiguration{
+        +MediaConsumptionReportingConfiguration consumption
+        +list[MediaMetricsReportingConfiguration] metrics
+    }
+    class MediaConsumptionReportingConfiguration{
+        +int reporting_interval
+        +float sample_percentage
+        +bool location_reporting
+        +bool access_reporting
+    }
+    class MediaMetricsReportingConfiguration{
+        +int sampling_period
+        +str metrics_reporting_configuration_id
+        +list[Snssai] slice_scope
+        +str scheme
+        +str data_network_name
+        +int reporting_interval
+        +float sample_percentage
+        +list[str] url_filters
+        +list[str] metrics
+    }
+    class MediaDynamicPolicy{
+        +str id
+        +str policy_template_id
+        +MediaDynamicPolicySessionContext session_context
+        +MediaQoSParameters qos_parameters
+        +MediaChargingSpecification charging
+    }
+    class MediaDynamicPolicySessionContext{
+        +Snssai snssai
+        +str dnn
+    }
+    class MediaQoSParameters{
+        +str reference
+        +Bitrate max_auth_bitrate_uplink
+        +Bitrate max_auth_bitrate_downlink
+        +int default_packet_loss_rate_uplink
+        +int default_packet_loss_rate_downlink
+    }
+    class MediaChargingSpecification{
+        +str sponsor_id
+        +bool enabled
+        +list[Gpsi] gpsis
+    }
+    class Snssai{
+        +int sst
+        +str sd
+    }
+    class Bitrate{
+    }
+    class Gpsi{
+    }
+    MediaConfiguration "1" *-- "*" MediaSession
+    MediaSession "1" *-- "*" MediaServerCertificate
+    MediaSession "1" *-- "0..1" MediaEntry
+    MediaSession "1" *-- "0..1" MediaReportingConfiguration
+    MediaSession "1" *-- "*" MediaDynamicPolicy
+    MediaEntry "1" *-- "1..*" MediaDistribution
+    MediaEntry "1" *-- "*" MediaAppDistribution
+    MediaDistribution "1" *-- "0..1" MediaEntryPoint
+%%    MediaDistribution "1" --> "*" MediaServerCertificate
+    MediaAppDistribution "1" *-- "1..*" MediaEntryPoint
+    MediaReportingConfiguration "1" *-- "0..1" MediaConsumptionReportingConfiguration
+    MediaReportingConfiguration "1" *-- "*" MediaMetricsReportingConfiguration
+    MediaMetricsReportingConfiguration "1" *-- "0..1" Snssai
+    MediaDynamicPolicy "1" *-- "0..1" MediaDynamicPolicySessionContext
+    MediaDynamicPolicy "1" *-- "0..1" MediaQoSParameters
+    MediaDynamicPolicy "1" *-- "0..1" MediaChargingSpecification
+    MediaDynamicPolicySessionContext "1" *-- "0..1" Snssai
+    MediaQoSParameters "1" *-- "0..2" Bitrate
+    MediaChargingSpecification "1" *-- "*" Gpsi
+    Bitrate <|-- str
+    Gpsi <|-- str
