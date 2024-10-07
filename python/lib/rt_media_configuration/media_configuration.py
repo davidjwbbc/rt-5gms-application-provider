@@ -52,6 +52,8 @@ from .media_app_distribution import MediaAppDistribution
 from .delta_operations import *
 from .importers import M1SessionImporter
 
+#: DEFAULT_CONFIG - The default configuration
+#: :private:
 DEFAULT_CONFIG = '''[media-configuration]
 m5_authority = example.com:7777
 m8outputs = FiveGMagJsonFormatter(root_dir=/usr/share/nginx/html/m8)
@@ -60,6 +62,7 @@ m8outputs = FiveGMagJsonFormatter(root_dir=/usr/share/nginx/html/m8)
 class MediaConfiguration:
     '''MediaConfiguration Class
 ========================
+
 This class provides modelling for a collection of media assets and the
 logic to use the rt_m1_client.M1Session object to synchronise that
 configuration with the 5GMS AF.

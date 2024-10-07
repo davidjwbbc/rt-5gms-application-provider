@@ -25,6 +25,7 @@
 
 '''
 import configparser
+from io import StringIO
 import os
 import os.path
 

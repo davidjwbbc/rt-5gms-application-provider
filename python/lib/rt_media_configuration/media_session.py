@@ -48,7 +48,8 @@ from .media_server_certificate import MediaServerCertificate
 
 class MediaSession:
     '''MediaSession class
-================
+==================
+
 This class models a 3GPP TS 26.512 ProvisioningSession. The ProvisioningSession information will be published via M5.
 '''
 

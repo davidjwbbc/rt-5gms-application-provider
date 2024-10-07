@@ -37,7 +37,7 @@ from .media_caching_directive import MediaCachingDirective
 
 class MediaCachingConfiguration:
     '''MediaCachingConfiguration class
-=====================
+===============================
 
 This models a caching configuration for a MediaDistribution.
 '''

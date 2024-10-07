@@ -35,7 +35,7 @@ from rt_m1_client.types import DistributionNetworkType, DistributionMode
 
 class MediaSupplementaryDistributionNetwork:
     '''MediaSupplementaryDistributionNetwork class
-=====================
+===========================================
 
 This models a media entry point which consists of mandatory relative path and
 a mime content type with an optional array of profile strings.

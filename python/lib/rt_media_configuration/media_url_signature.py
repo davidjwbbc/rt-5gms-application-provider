@@ -35,7 +35,7 @@ from rt_m1_client.types import URLSignature
 
 class MediaURLSignature:
     '''MediaURLSignature class
-=====================
+=======================
 
 This models a URL signature for a MediaDistribution.
 '''
