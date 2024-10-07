@@ -24,3 +24,8 @@ rt_media_configuration.MediaConfiguration objects.
 from .m8_output import M8Output
 from .five_g_mag_json import FiveGMagJsonFormatter
 #from .dvbi import DVBIFormatter
+
+__all__ = [
+  'M8Output',
+  'FiveGMagJsonFormatter'
+]

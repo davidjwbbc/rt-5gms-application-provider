@@ -23,3 +23,8 @@ from .gpsi import Gpsi
 from .bitrate import Bitrate
 from .snssai import Snssai
 from .importers import *
+
+import inspect
+import sys
+
+__all__ = [c.__name__ for c in sys.modules[__name__].__dict__.values() if inspect.isclass(c)]
