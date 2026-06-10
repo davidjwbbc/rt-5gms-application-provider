@@ -1129,7 +1129,7 @@ async def parse_args() -> Tuple[argparse.Namespace,Configuration]:
                                          help='Provisioning session id to set the certificate for')
     parser_set_certificate.add_argument('-c', '--certificate-id', required=True,
                                          help='The certificate id of the certificate to set')
-    parser_set_certificate.add_argument('certificate-PEM-file', nargs='?',
+    parser_set_certificate.add_argument('certificate_pem_file', metavar='certificate-PEM-file', nargs='?',
                                         help='PEM file to load the public certificate from, if omitted will use stdin instead')
 
     # m1-session-cli check-certificate-renewal
